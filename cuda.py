@@ -34,6 +34,17 @@ int _size(int *shape,int ndim){{
     }}
     return size;
 }}
+void shapeToDevice(const int *shape,int **d_shape,int ndim){{
+    cudaMalloc(d_shape, ndim * sizeof(int));
+    cudaMemcpy(*d_shape, shape, ndim * sizeof(int), cudaMemcpyHostToDevice);
+}}
+__device__ int flattenIndex(int ndim,const int* coords,const int* stride){{
+    int flat = 0;
+    for (int d = ndim - 1; d >= 0; --d) {{
+        flat += coords[d] * stride[d];
+    }}
+    return flat;
+}}
 
 """
 
@@ -94,32 +105,49 @@ def bin_ops_code(name, *dtypes: str):
         # print("code for", f"bin: {func_name=} {kernel_name}")
         code = f"""
 extern "C" __global__
-void {kernel_name}(const {dtype}* A, const {dtype} B, {dtype}* C,const int* shape, int ndim, int totalSize) {{
+void {kernel_name}(
+    const {dtype}* A, const int* stride_A,
+    const {dtype} B, 
+    {dtype}* C, const int* stride_C,
+    const int* shape,
+    int ndim, 
+    int totalSize
+) {{
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= totalSize) return;
 
     int coords[MAX_DIMS];
     unravel_index(idx, shape, ndim, coords);
 
-    // Example use: convert back to flat index (row-major)
-    int stride = 1, flat = 0;
-    for (int d = ndim - 1; d >= 0; --d) {{
-        flat += coords[d] * stride;
-        stride *= shape[d];
-    }}
+    int flat_A = flattenIndex(ndim, coords, stride_A);
+    int flat_C = flattenIndex(ndim, coords, stride_C);
 
-    C[flat] = {op}(A[flat], B);
+    C[flat_C] = {op}(A[flat_A], B);
 }}
 extern "C" void 
-{func_name}(const {dtype} *d_a, {dtype} d_b,{dtype} *d_c, int* shape,int ndim){{
+{func_name}(
+    const {dtype} *d_a, const int* stride_A,
+    {dtype} d_b,
+    {dtype} *d_c, const int* stride_C,
+    int* shape,
+    int ndim
+){{
     int totalSize = _size(shape,ndim);
-    int *d_shape;
-    cudaMalloc(&d_shape, ndim * sizeof(int));
-    cudaMemcpy(d_shape, shape, ndim * sizeof(int), cudaMemcpyHostToDevice);
+
+    int *d_shape; shapeToDevice(shape,&d_shape,ndim);
+    int *d_stride_A; shapeToDevice(stride_A,&d_stride_A,ndim);
+    int *d_stride_C; shapeToDevice(stride_C,&d_stride_C,ndim);
 
     int blockSize = 256;
     int gridSize = (totalSize + blockSize - 1) / blockSize;
-    {kernel_name}<<<gridSize, blockSize>>>(d_a, d_b, d_c, d_shape, ndim, totalSize);
+    {kernel_name}<<<gridSize, blockSize>>>(
+        d_a, d_stride_A,
+        d_b, 
+        d_c, d_stride_C, 
+        d_shape, 
+        ndim,
+        totalSize
+    );
 }}
     """
         return code
@@ -136,32 +164,45 @@ def uops_code(name, *dtypes: str):
         # print("code for", f"uop: {func_name=} {kernel_name}")
         code = f"""
 extern "C" __global__
-void {kernel_name}(const {dtype}* A, {dtype}* C,const int* shape, int ndim, int totalSize) {{
+void {kernel_name}(
+    const {dtype}* A, const int* stride_A,
+    {dtype}* C, const int* stride_C,
+    const int* shape,
+    int ndim,
+    int totalSize
+) {{
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= totalSize) return;
 
     int coords[MAX_DIMS];
     unravel_index(idx, shape, ndim, coords);
 
-    // Example use: convert back to flat index (row-major)
-    int stride = 1, flat = 0;
-    for (int d = ndim - 1; d >= 0; --d) {{
-        flat += coords[d] * stride;
-        stride *= shape[d];
-    }}
+    int flat_A = flattenIndex(ndim, coords, stride_A);
+    int flat_C = flattenIndex(ndim, coords, stride_C);
 
-    C[flat] = {op}(A[flat]);
+    C[flat_C] = {op}(A[flat_A]);
 }}
 extern "C" void 
-{func_name}(const {dtype} *d_a, {dtype} *d_c, int* shape,int ndim){{
+{func_name}(
+    const {dtype} *d_a, const int* stride_A,
+    {dtype} *d_c, const int* stride_C,
+    int* shape,
+    int ndim
+){{
     int totalSize = _size(shape,ndim);
-    int *d_shape;
-    cudaMalloc(&d_shape, ndim * sizeof(int));
-    cudaMemcpy(d_shape, shape, ndim * sizeof(int), cudaMemcpyHostToDevice);
+    int *d_shape; shapeToDevice(shape, &d_shape, ndim);
+    int *d_stride_A; shapeToDevice(stride_A, &d_stride_A, ndim);
+    int *d_stride_C; shapeToDevice(stride_C, &d_stride_C, ndim);
 
     int blockSize = 256;
     int gridSize = (totalSize + blockSize - 1) / blockSize;
-    {kernel_name}<<<gridSize, blockSize>>>(d_a, d_c, d_shape, ndim, totalSize);
+    {kernel_name}<<<gridSize, blockSize>>>(
+        d_a, d_stride_A,
+        d_c, d_stride_C,
+        d_shape, 
+        ndim, 
+        totalSize
+    );
 }}
     """
         return code
@@ -178,32 +219,51 @@ def elemwise_code(name, *dtypes: str):
         # print("code for", f"ew: {func_name=} {kernel_name}")
         code = f"""
 extern "C" __global__
-void {kernel_name}(const {dtype}* A, const {dtype}* B, {dtype}* C,const int* shape, int ndim, int totalSize) {{
+void {kernel_name}(
+    const {dtype}* A, const int* stride_A,
+    const {dtype}* B, const int* stride_B,
+    {dtype}* C, const int* stride_C,
+    const int* shape,
+    int ndim,
+    int totalSize
+) {{
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= totalSize) return;
 
     int coords[MAX_DIMS];
     unravel_index(idx, shape, ndim, coords);
 
-    // Example use: convert back to flat index (row-major)
-    int stride = 1, flat = 0;
-    for (int d = ndim - 1; d >= 0; --d) {{
-        flat += coords[d] * stride;
-        stride *= shape[d];
-    }}
+    int flat_A = flattenIndex(ndim, coords, stride_A);
+    int flat_B = flattenIndex(ndim, coords, stride_B);
+    int flat_C = flattenIndex(ndim, coords, stride_C);
 
-    C[flat] = {op}(A[flat] , B[flat]);
+
+    C[flat_C] = {op}(A[flat_A] , B[flat_B]);
 }}
 extern "C" void 
-{func_name}(const {dtype} *d_a,const {dtype} *d_b,{dtype} *d_c,int* shape,int ndim){{
+{func_name}(
+    const {dtype} *d_a, const int* stride_A,
+    const {dtype} *d_b, const int* stride_B,
+    {dtype} *d_c, const int* stride_C,
+    int* shape,
+    int ndim
+){{
     int totalSize = _size(shape,ndim);
-    int *d_shape;
-    cudaMalloc(&d_shape, ndim * sizeof(int));
-    cudaMemcpy(d_shape, shape, ndim * sizeof(int), cudaMemcpyHostToDevice);
+    int *d_shape; shapeToDevice(shape,&d_shape,ndim);
+    int *d_stride_A; shapeToDevice(stride_A,&d_stride_A,ndim);
+    int *d_stride_B; shapeToDevice(stride_B,&d_stride_B,ndim);
+    int *d_stride_C; shapeToDevice(stride_C,&d_stride_C,ndim);
 
     int blockSize = 256;
     int gridSize = (totalSize + blockSize - 1) / blockSize;
-    {kernel_name}<<<gridSize, blockSize>>>(d_a, d_b, d_c, d_shape, ndim, totalSize);
+    {kernel_name}<<<gridSize, blockSize>>>(
+        d_a, d_stride_A,
+        d_b, d_stride_B,
+        d_c, d_stride_C,
+        d_shape,
+        ndim,
+        totalSize
+    );
 }}
     """
         return code
@@ -246,12 +306,24 @@ def get_cuda_code():
 
 
 class Buffer:
-    def __init__(self, nbytes: int):
+    def __init__(self, nbytes: int, allocated=False):
         ptr = c_void_p()
         err = CudaAllocator.alloc(byref(ptr), nbytes)
         assert_cuda_error(err)
         self.ptr = ptr
         self.nbytes = nbytes
+        self.allocated = allocated
+        self.refcount = 1
+
+    def free(self):
+        self.refcount -= 1
+        if self.refcount <= 0:
+            CudaAllocator._free(self.ptr)
+            CudaAllocator.mem -= self.nbytes
+
+    def ref(self):
+        self.refcount += 1
+        return self
 
 
 class CudaAllocator:
@@ -268,7 +340,8 @@ class CudaAllocator:
 
     @classmethod
     def alloc_empty(cls, shape, dtype: np.typing.DTypeLike) -> Buffer:
-        buffer = Buffer(np.dtype(dtype).itemsize * np.prod(shape))
+        buffer = Buffer(np.dtype(dtype).itemsize *
+                        np.prod(shape), allocated=True)
         # print(f"Allocated {buffer.nbytes} bytes")
         cls.mem += buffer.nbytes
         return buffer
@@ -286,17 +359,22 @@ class CudaAllocator:
         return buffer
 
     @classmethod
-    def from_cuda(cls, buffer: Buffer, shape, dtype):
-        host_out = np.empty(shape, dtype=dtype)
+    def from_cuda(cls, buffer: Buffer, shape, dtype, stride):
+        assert isinstance(buffer, Buffer)
+        assert buffer.allocated
+        arr = np.empty(shape, dtype=dtype)
         cls.synchronize()
         err = cls.memcpy(
-            host_out.ctypes.data_as(c_void_p),
+            arr.ctypes.data_as(c_void_p),
             buffer.ptr,
-            host_out.nbytes,
+            arr.nbytes,
             cls._cudaMemcpyDeviceToHost
         )
+        arr = np.lib.stride_tricks.as_strided(
+            arr, shape=shape, strides=[s * arr.itemsize for s in stride]
+        )
         assert_cuda_error(err)
-        return host_out
+        return arr
 
     @classmethod
     def synchronize(cls,):
@@ -305,10 +383,7 @@ class CudaAllocator:
 
     @classmethod
     def free(cls, buffer: Buffer):
-        cls._free(buffer.ptr)
-        cls.mem -= buffer.nbytes
-        # print(f"Freed {buffer.nbytes} bytes")
-        del buffer
+        buffer.free()
 
 
 lib = compile_cuda(get_cuda_code(), "cuda_code")
@@ -316,30 +391,34 @@ lib = compile_cuda(get_cuda_code(), "cuda_code")
 
 def define_elemwise_op(name: str):
     return _define_func(lib[name], [
-        c_void_p,  # a
-        c_void_p,  # b
-        c_void_p,  # output
-        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1,
-                               flags="C_CONTIGUOUS"),  # shape
+        c_void_p, _int_1d_array(),  # a
+        c_void_p, _int_1d_array(),  # b
+        c_void_p, _int_1d_array(),  # output
+        _int_1d_array(),  # shape
+        c_int,
     ], None)
+
+
+def _int_1d_array():
+    return np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags="C_CONTIGUOUS")
 
 
 def define_bin_op(name: str, type):
     return _define_func(lib[name], [
-        c_void_p,  # a
+        c_void_p, _int_1d_array(),  # a , stride of a
         type,  # b
-        c_void_p,  # output
-        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1,
-                               flags="C_CONTIGUOUS"),  # shape
+        c_void_p, _int_1d_array(),  # output,stride of output
+        _int_1d_array(),  # shape
+        c_int,
     ], None)
 
 
 def define_uop(name: str):
     return _define_func(lib[name], [
-        c_void_p,  # a
-        c_void_p,  # output
-        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1,
-                               flags="C_CONTIGUOUS"),  # shape
+        c_void_p, _int_1d_array(),  # a
+        c_void_p, _int_1d_array(),  # output
+        _int_1d_array(),  # shape
+        c_int,
     ], None)
 
 
