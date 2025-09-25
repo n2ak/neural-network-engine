@@ -28,6 +28,21 @@ def test_elemwise_ops():
         check(func(a, b), func(from_numpy(a), from_numpy(b)).numpy())
 
 
+def test_elemwise_ops_broadcast():
+    funcs = [
+        lambda a, b:  a + b,
+        lambda a, b:  a * b,
+        lambda a, b:  a / b,
+        lambda a, b:  a - b,
+    ]
+
+    a = np.random.randn(3, 7, 5, 9)
+    b = np.random.randn(7, 1, 9)
+
+    for func in funcs:
+        check(func(a, b), func(from_numpy(a), from_numpy(b)).numpy())
+
+
 def test_bin_ops():
     funcs = [
         lambda a, b:  a + b,
