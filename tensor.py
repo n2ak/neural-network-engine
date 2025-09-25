@@ -124,8 +124,6 @@ class Tensor:
     def __del__(self):
         if self.is_cuda:
             assert isinstance(self.data, Buffer), type(self.data)
-            # TODO: Tensor.from_numpy(a).cuda().transpose(1,2).numpy()
-            # first value frees the buffer if is used more than once
             CudaAllocator.free(self.data)
         else:
             del self.data
@@ -182,10 +180,55 @@ class Tensor:
         if self.is_contiguous:
             return self
         new_stride = stride_from_shape(self.shape)
+        # TODO: do it in device
         return Tensor(
             data=np.ascontiguousarray(self.numpy()),
             device="cpu",
         ).to(self.device)
+
+    def _broadcastable(self, other: Self):
+        for d1, d2 in zip(self.shape[::-1], other.shape[::-1]):
+            if d1 == 1 or d2 == 1:
+                continue
+            if d1 != d2:
+                return False
+        return True
+
+    def try_broadcast(a, b: Self):
+        assert a._broadcastable(b)
+        if a.ndim < b.ndim:
+            pass
+        a_shape = a.shape[::-1]
+        b_shape = b.shape[::-1]
+
+        expected_shape = [1] * max(a.ndim, b.ndim)
+
+        for i in range(len(expected_shape)):
+            d1 = a_shape[i] if i < a.ndim else -1
+            d2 = b_shape[i] if i < b.ndim else -1
+            expected_shape[i] = max(d1, d2)
+        expected_shape = expected_shape[::-1]
+        return a.expand(*expected_shape), b.expand(*expected_shape)
+
+    def expand(self, *dims: int):
+        new_shape = dims
+        expected_stride = [0] * len(dims)
+        for i, d, sh, s in zip(range(self.ndim), dims[::-1], self.shape[::-1], self.stride[::-1]):
+            if sh == d:
+                expected_stride[i] = s
+            else:
+                if sh != 1:
+                    raise Exception(f"dimension at {i} should be 1")
+                expected_stride[i] = 0
+        expected_stride = expected_stride[::-1]
+
+        return Tensor(
+            data=self.data.ref(),  # type: ignore
+            dtype=self.dtype,
+            shape=new_shape,
+            stride=expected_stride,
+            device=self.device
+        )
 
 
 class CUDA_OPS:
@@ -194,7 +237,7 @@ class CUDA_OPS:
     @classmethod
     def elem_op(cls, op_name, a: Tensor, b: Tensor):
         op = cls._ops[elemwise_op_name(op_name, a.dtype)]
-        assert a.shape == b.shape
+        a, b = a.try_broadcast(b)
         assert a.dtype == b.dtype
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)

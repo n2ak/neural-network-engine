@@ -14,8 +14,8 @@ HEADER = f"""
 #define MAX_DIMS {MAX_DIMS}
 #define float32 float
 #define float64 double
-#define int32 int 
-#define int64 long long 
+#define int32 int
+#define int64 long long
 #define _add(a,b) a+b
 #define _mul(a,b) a*b
 #define _sub(a,b) a-b
@@ -107,10 +107,10 @@ def bin_ops_code(name, *dtypes: str):
 extern "C" __global__
 void {kernel_name}(
     const {dtype}* A, const int* stride_A,
-    const {dtype} B, 
+    const {dtype} B,
     {dtype}* C, const int* stride_C,
     const int* shape,
-    int ndim, 
+    int ndim,
     int totalSize
 ) {{
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -124,7 +124,7 @@ void {kernel_name}(
 
     C[flat_C] = {op}(A[flat_A], B);
 }}
-extern "C" void 
+extern "C" void
 {func_name}(
     const {dtype} *d_a, const int* stride_A,
     {dtype} d_b,
@@ -142,9 +142,9 @@ extern "C" void
     int gridSize = (totalSize + blockSize - 1) / blockSize;
     {kernel_name}<<<gridSize, blockSize>>>(
         d_a, d_stride_A,
-        d_b, 
-        d_c, d_stride_C, 
-        d_shape, 
+        d_b,
+        d_c, d_stride_C,
+        d_shape,
         ndim,
         totalSize
     );
@@ -182,7 +182,7 @@ void {kernel_name}(
 
     C[flat_C] = {op}(A[flat_A]);
 }}
-extern "C" void 
+extern "C" void
 {func_name}(
     const {dtype} *d_a, const int* stride_A,
     {dtype} *d_c, const int* stride_C,
@@ -199,8 +199,8 @@ extern "C" void
     {kernel_name}<<<gridSize, blockSize>>>(
         d_a, d_stride_A,
         d_c, d_stride_C,
-        d_shape, 
-        ndim, 
+        d_shape,
+        ndim,
         totalSize
     );
 }}
@@ -240,7 +240,7 @@ void {kernel_name}(
 
     C[flat_C] = {op}(A[flat_A] , B[flat_B]);
 }}
-extern "C" void 
+extern "C" void
 {func_name}(
     const {dtype} *d_a, const int* stride_A,
     const {dtype} *d_b, const int* stride_B,
@@ -360,18 +360,23 @@ class CudaAllocator:
 
     @classmethod
     def from_cuda(cls, buffer: Buffer, shape, dtype, stride):
+        assert buffer.refcount > 0
         assert isinstance(buffer, Buffer)
         assert buffer.allocated
+
         arr = np.empty(shape, dtype=dtype)
+
+        nbytes = get_nbytes(shape, stride, dtype)
+        arr = np.lib.stride_tricks.as_strided(
+            arr, shape=shape, strides=[s * arr.itemsize for s in stride]
+        )
+
         cls.synchronize()
         err = cls.memcpy(
             arr.ctypes.data_as(c_void_p),
             buffer.ptr,
-            arr.nbytes,
+            nbytes,
             cls._cudaMemcpyDeviceToHost
-        )
-        arr = np.lib.stride_tricks.as_strided(
-            arr, shape=shape, strides=[s * arr.itemsize for s in stride]
         )
         assert_cuda_error(err)
         return arr
@@ -384,6 +389,16 @@ class CudaAllocator:
     @classmethod
     def free(cls, buffer: Buffer):
         buffer.free()
+
+
+def get_nbytes(shape, stride, dtype):
+    itemsize = np.dtype(dtype).itemsize
+    size = 1
+    for i in range(len(shape)):
+        if stride[i] == 0:
+            continue
+        size *= shape[i]
+    return size * itemsize
 
 
 lib = compile_cuda(get_cuda_code(), "cuda_code")
