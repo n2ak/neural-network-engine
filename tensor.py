@@ -1,6 +1,6 @@
 from typing import Self
 import numpy as np
-from cuda import CudaAllocator, _cuda_ops, bin_op_name, elemwise_op_name, uop_name, Buffer
+from cuda import CudaAllocator, _cuda_ops, bin_op_name, elemwise_op_name, uop_name, recuceop_name, Buffer, promote_dtype, promote_uop_dtype
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -138,7 +138,7 @@ class Tensor:
         return CUDA_OPS.bin_op("sub", self, other)
 
     def __truediv__(self, other: Self | int | float):
-        return CUDA_OPS.bin_op("div", self, other)
+        return CUDA_OPS.bin_op("div", self, other, floating_op=True)
 
     def exp(self):
         return CUDA_OPS.uop("exp", self)
@@ -148,6 +148,22 @@ class Tensor:
 
     def log2(self):
         return CUDA_OPS.uop("log2", self)
+
+    def sum(self, axis: int | tuple[int, ...], keepdim=False):
+        out_dtype = self.dtype
+        if self.dtype == np.int32:
+            out_dtype = np.dtype(np.int64)
+        axis = (axis,) if isinstance(axis, int) else axis
+        return CUDA_OPS.reduce_op("sum", self, axis, keepdim=keepdim, out_dtype=out_dtype)
+
+    def mean(self, axis: int | tuple[int, ...], keepdim=False):
+        axis = (axis,) if isinstance(axis, int) else axis
+        d = np.prod([self.shape[a] for a in axis]).item()
+        return self.sum(axis, keepdim=keepdim) / d
+
+    def max(self, axis: int | tuple[int, ...], keepdim=False):
+        axis = (axis,) if isinstance(axis, int) else axis
+        return CUDA_OPS.reduce_op("max", self, axis, keepdim=keepdim)
 
     @property
     def ndim(self): return len(self.shape)
@@ -235,13 +251,13 @@ class CUDA_OPS:
     _ops = _cuda_ops
 
     @classmethod
-    def elem_op(cls, op_name, a: Tensor, b: Tensor):
-        op = cls._ops[elemwise_op_name(op_name, a.dtype)]
+    def elem_op(cls, op_name, a: Tensor, b: Tensor, floating_op: bool):
+        out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
+        op = cls._ops[elemwise_op_name(op_name, a.dtype, b.dtype, out_dtype)]
         a, b = a.try_broadcast(b)
-        assert a.dtype == b.dtype
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
-        c = Tensor.empty(a.shape, device="cuda", dtype=a.dtype)  # TODO
+        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)  # TODO
         assert a.device == "cuda"
         assert b.device == "cuda"
         assert c.device == "cuda"
@@ -259,13 +275,14 @@ class CUDA_OPS:
         return c
 
     @classmethod
-    def _bin_op(cls, op_name, a: Tensor, b: int | float):
-        c = Tensor.empty(a.shape, device="cuda", dtype=a.dtype)  # TODO
+    def _bin_op(cls, op_name, a: Tensor, b: int | float, floating_op: bool):
+        b_type = "int32"if isinstance(b, int)else "float32"
+        out_dtype = np.dtype(promote_dtype(a.dtype, b_type, floating_op))
+        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)  # TODO
 
         assert a.device == "cuda"
         assert c.device == "cuda"
-
-        op = cls._ops[bin_op_name(op_name, a.dtype)]
+        op = cls._ops[bin_op_name(op_name, a.dtype, b_type, out_dtype)]
 
         ndim = len(a.shape)
         shape = np.array(a.shape, dtype=np.int32)
@@ -281,11 +298,12 @@ class CUDA_OPS:
         return c
 
     @classmethod
-    def uop(cls, op_name, a: Tensor):
-        op = cls._ops[uop_name(op_name, a.dtype)]
+    def uop(cls, op_name, a: Tensor, floating_op=True):
+        out_dtype = promote_uop_dtype(a.dtype, floating_op)
+        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
+        op = cls._ops[uop_name(op_name, a.dtype, out_dtype)]
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
-        c = Tensor.empty(a.shape, device="cuda", dtype=a.dtype)  # TODO
         assert a.device == "cuda"
         assert c.device == "cuda"
 
@@ -300,8 +318,47 @@ class CUDA_OPS:
         return c
 
     @classmethod
-    def bin_op(cls, op: str, a: Tensor, b: Tensor | int | float):
+    def reduce_op(cls, op_name, a: Tensor, axis: tuple[int, ...], keepdim: bool, out_dtype=None):
+        if out_dtype is None:
+            out_dtype = a.dtype
+
+        def get_shape(shape: list[int]):
+            if axis == ():
+                return ()
+            i = 0
+            for a in axis:
+                if keepdim:
+                    shape[a] = 1
+                else:
+                    shape.pop(a-i)
+                    i += 1
+            return shape
+
+        op = cls._ops[recuceop_name(op_name, str(a.dtype), str(out_dtype))]
+        c = Tensor.empty(get_shape(list(a.shape)),
+                         device="cuda", dtype=out_dtype)  # TODO
+        assert a.device == "cuda"
+        assert c.device == "cuda"
+
+        a_shape = np.array(a.shape, dtype=np.int32)
+        c_shape = np.array(c.shape, dtype=np.int32)
+        a_stride = np.array(a.stride, dtype=np.int32)
+        c_stride = np.array(c.stride, dtype=np.int32)
+
+        op(
+            a.data.ptr, a_stride, a_shape,  # type: ignore
+            c.data.ptr, c_stride, c_shape,  # type: ignore
+            np.array(axis, dtype=np.int32),
+            a.ndim,
+            c.ndim,
+            len(axis),
+            keepdim,
+        )
+        return c
+
+    @classmethod
+    def bin_op(cls, op: str, a: Tensor, b: Tensor | int | float, floating_op=False):
         assert isinstance(a, Tensor)
         if isinstance(b, Tensor):
-            return cls.elem_op(op, a, b)
-        return cls._bin_op(op, a, b)
+            return cls.elem_op(op, a, b, floating_op=floating_op)
+        return cls._bin_op(op, a, b, floating_op=floating_op)
