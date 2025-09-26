@@ -113,7 +113,7 @@ class Tensor:
                 device="cpu",
             )
         else:
-            # TODO
+            # TODO: do it in device
             return self.cpu().astype(dtype).cuda()
 
     def numpy(self) -> np.typing.NDArray:
@@ -260,7 +260,7 @@ class CUDA_OPS:
         a, b = a.try_broadcast(b)
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
-        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)  # TODO
+        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
         assert a.device == "cuda"
         assert b.device == "cuda"
         assert c.device == "cuda"
@@ -281,7 +281,7 @@ class CUDA_OPS:
     def _bin_op(cls, op_name, a: Tensor, b: int | float, floating_op: bool):
         b_type = "int32"if isinstance(b, int)else "float32"
         out_dtype = np.dtype(promote_dtype(a.dtype, b_type, floating_op))
-        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)  # TODO
+        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
 
         assert a.device == "cuda"
         assert c.device == "cuda"
@@ -340,7 +340,7 @@ class CUDA_OPS:
 
         op = cls._ops[recuceop_name(op_name, str(a.dtype), str(out_dtype))]
         c = Tensor.empty(get_shape(list(a.shape)),
-                         device="cuda", dtype=out_dtype)  # TODO
+                         device="cuda", dtype=out_dtype)
         assert a.device == "cuda"
         assert c.device == "cuda"
 

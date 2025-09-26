@@ -7,9 +7,11 @@ import torch as T
 def check(a1: T.Tensor, a2: Tensor):
     assert isinstance(a1, T.Tensor), type(a1)
     assert isinstance(a2, Tensor), type(a2)
+    assert a1.stride() == a2.stride
 
     a1_numpy = a1.numpy()
     a2_numpy = a2.numpy()
+
     assert a1_numpy.shape == a2_numpy.shape
     assert a1_numpy.dtype == a2_numpy.dtype
     assert a1_numpy.strides == a2_numpy.strides
@@ -75,25 +77,26 @@ def test_bin_ops():
 
 
 def test_reduce_ops():
-    for dtype in [T.float32, T.float64, T.int32, T.int64]:
-        torch_dtype = T.float32
-        if dtype == T.float64:
-            torch_dtype = T.float64
-        ops = [
-            ("sum", lambda x: x.sum(sum_axis)),
-            ("max", lambda x: x.max(max_axis).values
-                if isinstance(x, T.Tensor) else x.max(max_axis)),
-            ("mean", lambda x: x.mean(mean_axis, dtype=torch_dtype)
-                if isinstance(x, T.Tensor) else x.mean(mean_axis)),
-        ]
-        shape = (3, 5, 7, 9)
-        mean_axis = 1, 2
-        max_axis = 2  # torch only accpets one axis for max
-        sum_axis = 1, 2, 3
-        a = (T.randn(*shape) + 10).to(dtype)
-        for opname, func in ops:
-            print(dtype, opname)
-            check(func(a), func(from_torch(a)))
+    for keepdim in [False]:  # TODO: add True
+        for dtype in [T.float32, T.float64, T.int32, T.int64]:
+            torch_dtype = T.float32
+            if dtype == T.float64:
+                torch_dtype = T.float64
+            ops = [
+                ("sum", lambda x: x.sum(sum_axis, keepdim=keepdim)),
+                ("max", lambda x: x.max(max_axis, keepdim=keepdim).values
+                    if isinstance(x, T.Tensor) else x.max(max_axis, keepdim=keepdim)),
+                ("mean", lambda x: x.mean(mean_axis, dtype=torch_dtype, keepdim=keepdim)
+                    if isinstance(x, T.Tensor) else x.mean(mean_axis, keepdim=keepdim)),
+            ]
+            shape = (3, 5, 7, 9)
+            mean_axis = 1, 2
+            max_axis = 2  # torch only accpets one axis for max
+            sum_axis = 1, 2, 3
+            a = (T.randn(*shape) + 10).to(dtype)
+            for opname, func in ops:
+                print(dtype, opname, keepdim)
+                check(func(a), func(from_torch(a)))
 
 
 def test_reduce_ops_no_axis():
