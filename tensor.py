@@ -8,7 +8,7 @@ def get_numpy_stride(arr: np.typing.NDArray):
     return tuple(s // itemsize for s in arr.strides)
 
 
-def stride_from_shape(shape: tuple[int] | list[int]):
+def stride_from_shape(shape: tuple[int, ...] | list[int]):
     stride = []
     acc = 1
     for s in reversed(shape):
@@ -37,9 +37,9 @@ class Tensor:
         assert dtype is not None
 
         self.data = data
-        self.shape: tuple[int] = tuple(shape)  # type: ignore
-        self.stride: tuple[int] = tuple(stride)  # type: ignore
-        self.dtype: np.typing.DTypeLike = dtype
+        self.shape: tuple[int, ...] = tuple(shape)  # type: ignore
+        self.stride: tuple[int, ...] = tuple(stride)  # type: ignore
+        self.dtype = np.dtype(dtype)
 
     @property
     def is_contiguous(self):
@@ -249,17 +249,23 @@ class Tensor:
             device=self.device
         )
 
+    def __matmul__(self, other: Self):
+        return CUDA_OPS.matmul(self, other)
+
 
 class CUDA_OPS:
-    _ops = _cuda_ops
+    _kernels = _cuda_ops
 
     @classmethod
     def elem_op(cls, op_name, a: Tensor, b: Tensor, floating_op: bool):
         out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
-        op = cls._ops[elemwise_op_name(op_name, a.dtype, b.dtype, out_dtype)]
+        kernel = cls._kernels[elemwise_op_name(
+            op_name, a.dtype, b.dtype, out_dtype)]
+
         a, b = a.try_broadcast(b)
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
+
         c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
         assert a.device == "cuda"
         assert b.device == "cuda"
@@ -268,7 +274,8 @@ class CUDA_OPS:
         a_stride = np.array(a.stride, dtype=np.int32)
         b_stride = np.array(b.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
-        op(
+
+        kernel(
             a.data.ptr, a_stride,  # type: ignore
             b.data.ptr, b_stride,  # type: ignore
             c.data.ptr, c_stride,  # type: ignore
@@ -285,13 +292,13 @@ class CUDA_OPS:
 
         assert a.device == "cuda"
         assert c.device == "cuda"
-        op = cls._ops[bin_op_name(op_name, a.dtype, b_type, out_dtype)]
+        kernel = cls._kernels[bin_op_name(op_name, a.dtype, b_type, out_dtype)]
 
         ndim = len(a.shape)
         shape = np.array(a.shape, dtype=np.int32)
         a_stride = np.array(a.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
-        op(
+        kernel(
             a.data.ptr, a_stride,  # type: ignore
             b,
             c.data.ptr,  c_stride,  # type: ignore
@@ -304,7 +311,7 @@ class CUDA_OPS:
     def uop(cls, op_name, a: Tensor, floating_op=True):
         out_dtype = promote_uop_dtype(a.dtype, floating_op)
         c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
-        op = cls._ops[uop_name(op_name, a.dtype, out_dtype)]
+        kernel = cls._kernels[uop_name(op_name, a.dtype, out_dtype)]
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
         assert a.device == "cuda"
@@ -312,7 +319,7 @@ class CUDA_OPS:
 
         a_stride = np.array(a.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
-        op(
+        kernel(
             a.data.ptr, a_stride,  # type: ignore
             c.data.ptr, c_stride,  # type: ignore
             shape,
@@ -338,7 +345,8 @@ class CUDA_OPS:
                     i += 1
             return shape
 
-        op = cls._ops[recuceop_name(op_name, str(a.dtype), str(out_dtype))]
+        kernel = cls._kernels[recuceop_name(
+            op_name, str(a.dtype), str(out_dtype))]
         c = Tensor.empty(get_shape(list(a.shape)),
                          device="cuda", dtype=out_dtype)
         assert a.device == "cuda"
@@ -349,7 +357,7 @@ class CUDA_OPS:
         a_stride = np.array(a.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
 
-        op(
+        kernel(
             a.data.ptr, a_stride, a_shape,  # type: ignore
             c.data.ptr, c_stride, c_shape,  # type: ignore
             np.array(axis, dtype=np.int32),
@@ -366,3 +374,45 @@ class CUDA_OPS:
         if isinstance(b, Tensor):
             return cls.elem_op(op, a, b, floating_op=floating_op)
         return cls._bin_op(op, a, b, floating_op=floating_op)
+
+    @classmethod
+    def matmul(cls, a: Tensor, b: Tensor):
+        assert a.ndim == 2 or a.ndim == 3
+        assert b.ndim == 2
+        assert a.shape[-1] == b.shape[0]
+        assert a.dtype == b.dtype == np.float32
+        assert a.device == b.device == "cuda"
+
+        K, N = b.shape
+        if a.ndim == 3:
+            BATCH, M, K = a.shape
+            out = Tensor.empty(
+                (BATCH, M, N),
+                device="cuda",
+                dtype=np.float32
+            )
+            a_stride = a.stride
+            out_stride = out.stride
+        else:
+            BATCH = 1
+            M, K = a.shape
+            out = Tensor.empty(
+                (M, N),
+                device="cuda",
+                dtype=np.float32
+            )
+            a_stride = [0] + list(a.stride)
+            out_stride = [0] + list(out.stride)
+
+        name = "matmul3D_2d"
+        kernel = cls._kernels[name]
+        kernel(
+            a.data.ptr,  # type: ignore
+            b.data.ptr,  # type: ignore
+            out.data.ptr,  # type: ignore
+            np.array(a_stride, dtype=np.int32),
+            np.array(b.stride, dtype=np.int32),
+            np.array(out_stride, dtype=np.int32),
+            BATCH, M, K, N,
+        )
+        return out

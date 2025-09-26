@@ -1,25 +1,5 @@
-import numpy as np
-from numpy.typing import NDArray
-from tensor import Tensor
 import torch as T
-
-
-def check(a1: T.Tensor, a2: Tensor):
-    assert isinstance(a1, T.Tensor), type(a1)
-    assert isinstance(a2, Tensor), type(a2)
-    assert a1.stride() == a2.stride
-
-    a1_numpy = a1.numpy()
-    a2_numpy = a2.numpy()
-
-    assert a1_numpy.shape == a2_numpy.shape
-    assert a1_numpy.dtype == a2_numpy.dtype
-    assert a1_numpy.strides == a2_numpy.strides
-    assert np.allclose(a1_numpy, a2_numpy), (a1_numpy.flatten()[
-        :10], a2_numpy.flatten()[:10])
-
-
-def from_torch(a: T.Tensor): return Tensor.from_numpy(a.numpy()).cuda()
+from _utils import check, from_torch
 
 
 def test_elemwise_ops():
@@ -136,6 +116,16 @@ def test_uops():
         for opname, func in ops:
             print(opname)
             check(func(a), func(from_torch(a)))
+
+
+def test_matmul():
+    a = T.randn(3, 5, 7)
+    b = T.randn(7, 9)
+
+    def func(a, b):
+        return a @ b
+
+    check(func(a, b), func(from_torch(a), from_torch(b)))
 
 
 def test_complex():
