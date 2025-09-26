@@ -149,21 +149,24 @@ class Tensor:
     def log2(self):
         return CUDA_OPS.uop("log2", self)
 
-    def sum(self, axis: int | tuple[int, ...], keepdim=False):
+    def max(self, axis: int | tuple[int, ...] = (), keepdim=False):
+        return CUDA_OPS.reduce_op("max", self,  axis=axis, keepdim=keepdim)
+
+    def sum(self, axis: int | tuple[int, ...] = (), keepdim=False):
         out_dtype = self.dtype
         if self.dtype == np.int32:
             out_dtype = np.dtype(np.int64)
-        axis = (axis,) if isinstance(axis, int) else axis
-        return CUDA_OPS.reduce_op("sum", self, axis, keepdim=keepdim, out_dtype=out_dtype)
+        return CUDA_OPS.reduce_op("sum", self, axis=axis, keepdim=keepdim, out_dtype=out_dtype)
 
-    def mean(self, axis: int | tuple[int, ...], keepdim=False):
-        axis = (axis,) if isinstance(axis, int) else axis
-        d = np.prod([self.shape[a] for a in axis]).item()
-        return self.sum(axis, keepdim=keepdim) / d
+    def mean(self, axis: int | tuple[int, ...] = (), keepdim=False):
+        d = np.prod([self.shape[a] for a in self._correct_axis(axis)]).item()
+        return self.sum(axis=axis, keepdim=keepdim) / d
 
-    def max(self, axis: int | tuple[int, ...], keepdim=False):
+    def _correct_axis(self, axis: int | tuple[int, ...]):
         axis = (axis,) if isinstance(axis, int) else axis
-        return CUDA_OPS.reduce_op("max", self, axis, keepdim=keepdim)
+        if axis == ():
+            axis = tuple(range(self.ndim))
+        return axis
 
     @property
     def ndim(self): return len(self.shape)
@@ -318,7 +321,8 @@ class CUDA_OPS:
         return c
 
     @classmethod
-    def reduce_op(cls, op_name, a: Tensor, axis: tuple[int, ...], keepdim: bool, out_dtype=None):
+    def reduce_op(cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool, out_dtype=None):
+        axis = a._correct_axis(axis)
         if out_dtype is None:
             out_dtype = a.dtype
 

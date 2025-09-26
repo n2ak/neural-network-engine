@@ -532,7 +532,7 @@ class CudaAllocator:
     @classmethod
     def alloc_empty(cls, shape, dtype: np.typing.DTypeLike) -> Buffer:
         buffer = Buffer(np.dtype(dtype).itemsize *
-                        np.prod(shape), allocated=True)
+                        np.prod(shape, dtype=int), allocated=True)
         # print(f"Allocated {buffer.nbytes} bytes")
         cls.mem += buffer.nbytes
         return buffer

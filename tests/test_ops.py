@@ -5,8 +5,8 @@ import torch as T
 
 
 def check(a1: T.Tensor, a2: Tensor):
-    assert isinstance(a1, T.Tensor)
-    assert isinstance(a2, Tensor)
+    assert isinstance(a1, T.Tensor), type(a1)
+    assert isinstance(a2, Tensor), type(a2)
 
     a1_numpy = a1.numpy()
     a2_numpy = a2.numpy()
@@ -96,6 +96,25 @@ def test_reduce_ops():
             check(func(a), func(from_torch(a)))
 
 
+def test_reduce_ops_no_axis():
+    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+        torch_dtype = T.float32
+        if dtype == T.float64:
+            torch_dtype = T.float64
+        ops = [
+            ("sum", lambda x: x.sum()),
+            ("max", lambda x: x.max()
+                if isinstance(x, T.Tensor) else x.max()),
+            ("mean", lambda x: x.mean(dtype=torch_dtype)
+                if isinstance(x, T.Tensor) else x.mean()),
+        ]
+        shape = (3, 5, 7, 9)
+        a = (T.randn(*shape) + 10).to(dtype)
+        for opname, func in ops:
+            print(dtype, opname)
+            check(func(a), func(from_torch(a)))
+
+
 def test_uops():
     for dtype in [T.float32, T.float64, T.int32, T.int64]:
         ops = [
@@ -114,3 +133,16 @@ def test_uops():
         for opname, func in ops:
             print(opname)
             check(func(a), func(from_torch(a)))
+
+
+def test_complex():
+    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+        a_shape = (3, 5, 7, 9)
+        b_shape = (5, 1, 9)
+        a = (T.randn(*a_shape)+10).to(dtype)
+        b = (T.randn(*b_shape)+10).to(dtype)
+
+        def func(a, b):
+            return (((a*b)+10) / 12.0).mean()
+
+        check(func(a, b), func(from_torch(a), from_torch(b)))
