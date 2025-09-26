@@ -213,21 +213,21 @@ class Tensor:
                 return False
         return True
 
-    def try_broadcast(a, b: Self):
-        assert a._broadcastable(b)
-        if a.ndim < b.ndim:
+    def try_broadcast(self, other: Self):
+        assert self._broadcastable(other)
+        if self.ndim < other.ndim:
             pass
-        a_shape = a.shape[::-1]
-        b_shape = b.shape[::-1]
+        a_shape = self.shape[::-1]
+        b_shape = other.shape[::-1]
 
-        expected_shape = [1] * max(a.ndim, b.ndim)
+        expected_shape = [1] * max(self.ndim, other.ndim)
 
         for i in range(len(expected_shape)):
-            d1 = a_shape[i] if i < a.ndim else -1
-            d2 = b_shape[i] if i < b.ndim else -1
+            d1 = a_shape[i] if i < self.ndim else -1
+            d2 = b_shape[i] if i < other.ndim else -1
             expected_shape[i] = max(d1, d2)
         expected_shape = expected_shape[::-1]
-        return a.expand(*expected_shape), b.expand(*expected_shape)
+        return self.expand(*expected_shape), other.expand(*expected_shape)
 
     def expand(self, *dims: int):
         new_shape = dims
