@@ -17,6 +17,10 @@ def stride_from_shape(shape: tuple[int, ...] | list[int]):
     return tuple(stride)
 
 
+def as_tuple(input):
+    return input if isinstance(input, (tuple, list)) else (input,)
+
+
 class Tensor:
 
     def __init__(self, data: Buffer | np.typing.NDArray, device, shape=None, dtype=None, stride=None) -> None:
@@ -52,6 +56,10 @@ class Tensor:
         assert isinstance(data, np.ndarray), type(data)
         return Tensor(data, device="cpu")
 
+    @staticmethod
+    def randn(*shape: int, dtype=np.float32, device="cuda"):
+        return Tensor.from_numpy(np.random.randn(*shape).astype(dtype)).to(device)
+
     def cuda(self):
         if self.is_cuda:
             return self
@@ -74,7 +82,7 @@ class Tensor:
             device="cpu"
         )
 
-    def to(self, device):
+    def to(self, device: str):
         if device == self.device:
             return self
         if device == "cpu":
@@ -163,7 +171,7 @@ class Tensor:
         return self.sum(axis=axis, keepdim=keepdim) / d
 
     def _correct_axis(self, axis: int | tuple[int, ...]):
-        axis = (axis,) if isinstance(axis, int) else axis
+        axis = as_tuple(axis)
         if axis == ():
             axis = tuple(range(self.ndim))
         return axis
