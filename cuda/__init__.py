@@ -86,7 +86,6 @@ _cuda = ctypes.CDLL("libcudart.so", mode=RTLD_GLOBAL)
 
 
 def get_cuda_code():
-    matmul = matmul_code()
     uops = "\n\n".join(map(lambda v: uops_code(*v), UOPS))
     bin_op = "\n\n".join(map(lambda v: bin_ops_code(*v), BIN_OPS))
     reduce_ops = "\n\n".join(map(lambda v: reduce_axis_code(*v), REDUCE_OPS))
@@ -98,7 +97,6 @@ def get_cuda_code():
     code = "\n".join([
         HEADER,
         source,
-        matmul,
         reduce_ops,
         reduction_ops,
         elemwise_ops,

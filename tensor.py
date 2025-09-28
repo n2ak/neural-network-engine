@@ -29,10 +29,6 @@ class Tensor:
 
         self.device = device
         if isinstance(data, np.ndarray):
-            assert shape is None
-            assert shape is dtype
-            assert stride is dtype
-
             shape = data.shape
             dtype = data.dtype
             stride = get_numpy_stride(data)
@@ -400,7 +396,7 @@ class CUDA_OPS:
 
     @classmethod
     def matmul(cls, a: Tensor, b: Tensor):
-        assert a.ndim == 2 or a.ndim == 3
+        assert a.ndim in [2, 3]
         assert b.ndim == 2
         assert a.shape[-1] == b.shape[0]
         assert a.dtype == b.dtype == np.float32
@@ -427,8 +423,7 @@ class CUDA_OPS:
             a_stride = [0] + list(a.stride)
             out_stride = [0] + list(out.stride)
 
-        name = "matmul3D_2d"
-        kernel = cls._kernels[name]
+        kernel = cls._kernels["matmul_3D_2d"]
         kernel(
             a.data.ptr,  # type: ignore
             b.data.ptr,  # type: ignore
