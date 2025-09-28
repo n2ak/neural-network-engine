@@ -97,3 +97,10 @@ def reduction_op_code(name: str, *dtypes: tuple[str, str]):
         return code2
     assert len(dtypes) > 0
     return "\n\n".join(map(reduceop, dtypes))
+
+
+def reduction_ops_source_code():
+    return (
+        "\n\n".join(map(lambda v: reduce_axis_code(*v), REDUCE_OPS)) +
+        "\n\n".join(map(lambda v: reduction_op_code(*v), REDUCE_OPS))
+    )

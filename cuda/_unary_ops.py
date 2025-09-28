@@ -2,7 +2,7 @@
 import ctypes
 import numpy as np
 from ctypes import c_int, c_void_p
-from .utils import _define_func, _int_1d_array
+from .utils import _define_func, _int_1d_array, promote_uop_dtype
 
 
 UOPS = [
@@ -33,17 +33,6 @@ def register_uops(lib: ctypes.CDLL, ops: dict):
             ops[opname] = define_uop(lib, opname)
 
 
-def promote_uop_dtype(input_dtype, floating_operation):
-    input_dtype = np.dtype(input_dtype)
-    if floating_operation:
-        out_dtype = "float32"
-        if input_dtype == "float64":
-            out_dtype = "float64"
-    else:
-        out_dtype = input_dtype
-    return np.dtype(out_dtype)
-
-
 def uops_code(name: str, floating_operation: bool, *dtypes: str):
     op_num = f"_UOP_{name.upper()}"
 
@@ -63,3 +52,7 @@ def uops_code(name: str, floating_operation: bool, *dtypes: str):
         return code
     assert len(dtypes) > 0
     return "\n\n".join(map(uop, dtypes))
+
+
+def unary_ops_source_code():
+    return "\n\n".join(map(lambda v: uops_code(*v), UOPS))

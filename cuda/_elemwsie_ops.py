@@ -65,3 +65,7 @@ def elemwise_code(name: str, floating_op: bool, *dtypes: str):
     assert len(dtypes) > 0
 
     return "\n\n".join([elem_op_code_dype(d1, d2)for d1 in dtypes for d2 in dtypes])
+
+
+def element_wise_source_code():
+    return "\n\n".join(map(lambda v: elemwise_code(*v), ELEMWISE_OPS))

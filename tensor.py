@@ -1,7 +1,10 @@
 import os
 import numpy as np
 from typing import Self
-from cuda import CudaAllocator, _cuda_ops, elemwise_op_name, uop_name, reduceop_name, Buffer, promote_dtype, promote_uop_dtype, reduction_op_name
+from cuda import _cuda_ops
+from cuda.alloc import CudaAllocator, Buffer
+from cuda.utils import promote_dtype, promote_uop_dtype
+from cuda.op_names import elemwise_op_name, uop_name, reduceop_name, reduction_op_name
 
 
 def get_numpy_stride(arr: np.typing.NDArray):

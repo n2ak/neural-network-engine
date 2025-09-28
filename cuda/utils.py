@@ -30,9 +30,25 @@ def promote_dtype(dtype1, dtype2, floating_op: bool) -> str:
     return dtype1 if dt1.itemsize >= dt2.itemsize else dtype2
 
 
+def promote_uop_dtype(input_dtype, floating_operation):
+    input_dtype = np.dtype(input_dtype)
+    if floating_operation:
+        out_dtype = "float32"
+        if input_dtype == "float64":
+            out_dtype = "float64"
+    else:
+        out_dtype = input_dtype
+    return np.dtype(out_dtype)
+
+
 def read_cuda_source():
     import pathlib
-    source = ""
-    for file in (pathlib.Path(__file__).parent / "csrc").glob("*.cu"):
-        source += open(file).read() + "\n\n"
+    source_dir = pathlib.Path(__file__).parent / "csrc"
+    with open(source_dir / "header.cuh") as f:
+        header = f.read()
+    source = header + "\n\n"
+
+    for file in source_dir.glob("*.cu"):
+        with open(file) as f:
+            source += f.read() + "\n\n"
     return source

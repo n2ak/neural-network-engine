@@ -4,6 +4,7 @@ from _utils import check, from_torch
 
 
 def test_nn_forward():
+    T.manual_seed(0)
 
     lin1 = T.nn.Linear(3, 9)
     lin2 = Linear(3, 9)
