@@ -20,9 +20,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set up CUDA
-        uses: pytorch/action@v2
+        uses: NVIDIA/cuda-toolkit
         with:
-          cuda-version: "12.8"
+          cuda: "12.8"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
