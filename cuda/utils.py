@@ -32,6 +32,7 @@ def promote_dtype(dtype1, dtype2, floating_op: bool) -> str:
 
 def read_cuda_source():
     import pathlib
-    path = pathlib.Path(__file__).parent / "csrc/reduction.cu"
-    source = open(path).read()
+    source = ""
+    for file in (pathlib.Path(__file__).parent / "csrc").glob("*.cu"):
+        source += open(file).read() + "\n\n"
     return source
