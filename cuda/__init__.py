@@ -87,13 +87,13 @@ def get_cuda_code():
     matmul = matmul_code()
     uops = "\n\n".join(map(lambda v: uops_code(*v), UOPS))
     bin_op = "\n\n".join(map(lambda v: bin_ops_code(*v), BIN_OPS))
-    recudeops = "\n\n".join(map(lambda v: recude_code(*v), REDUCE_OPS))
+    reduceops = "\n\n".join(map(lambda v: reduce_code(*v), REDUCE_OPS))
     elemwise_ops = "\n\n".join(map(lambda v: elemwise_code(*v), ELEMWISE_OPS))
 
     return "\n".join([
         HEADER,
         matmul,
-        recudeops,
+        reduceops,
         elemwise_ops,
         bin_op,
         uops,

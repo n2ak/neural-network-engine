@@ -14,7 +14,7 @@ REDUCE_OPS = [
 ]
 
 
-def recuceop_name(name, in_dtype, out_dtype):
+def reduceop_name(name, in_dtype, out_dtype):
     return f"reduce_{name}_{in_dtype}_{out_dtype}"
 
 
@@ -32,16 +32,16 @@ def define_reduce_op(lib: ctypes.CDLL, name: str):
 def register_reduce_ops(lib: ctypes.CDLL, ops: dict):
     for name, *dtypes in REDUCE_OPS:
         for (in_dtype, out_dtypes) in dtypes:
-            opname = recuceop_name(name, in_dtype, out_dtypes)
+            opname = reduceop_name(name, in_dtype, out_dtypes)
             ops[opname] = define_reduce_op(lib, opname)
 
 
-def recude_code(name, *dtypes: tuple[str, str]):
+def reduce_code(name, *dtypes: tuple[str, str]):
     op = name
 
-    def recudeop(types: tuple[str, str]):
+    def reduceop(types: tuple[str, str]):
         input_dtype, out_dtype = types
-        func_name = recuceop_name(name, input_dtype, out_dtype)
+        func_name = reduceop_name(name, input_dtype, out_dtype)
         kernel_name = f"{func_name}_kernel"
         code = f"""
 extern "C" __global__
@@ -147,4 +147,4 @@ extern "C" void
 """
         return code
     assert len(dtypes) > 0
-    return "\n\n".join(map(recudeop, dtypes))
+    return "\n\n".join(map(reduceop, dtypes))

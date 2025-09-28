@@ -1,6 +1,6 @@
 from typing import Self
 import numpy as np
-from cuda import CudaAllocator, _cuda_ops, bin_op_name, elemwise_op_name, uop_name, recuceop_name, Buffer, promote_dtype, promote_uop_dtype
+from cuda import CudaAllocator, _cuda_ops, bin_op_name, elemwise_op_name, uop_name, reduceop_name, Buffer, promote_dtype, promote_uop_dtype
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -353,7 +353,7 @@ class CUDA_OPS:
                     i += 1
             return shape
 
-        kernel = cls._kernels[recuceop_name(
+        kernel = cls._kernels[reduceop_name(
             op_name, str(a.dtype), str(out_dtype))]
         c = Tensor.empty(get_shape(list(a.shape)),
                          device="cuda", dtype=out_dtype)
