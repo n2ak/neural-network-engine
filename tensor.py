@@ -1,7 +1,7 @@
 import os
-from typing import Self
 import numpy as np
-from cuda import CudaAllocator, _cuda_ops, bin_op_name, elemwise_op_name, uop_name, reduceop_name, Buffer, promote_dtype, promote_uop_dtype, reduction_op_name
+from typing import Self
+from cuda import CudaAllocator, _cuda_ops, elemwise_op_name, uop_name, reduceop_name, Buffer, promote_dtype, promote_uop_dtype, reduction_op_name
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -134,16 +134,16 @@ class Tensor:
             del self.data
 
     def __add__(self, other: Self | int | float):
-        return CUDA_OPS.bin_op("add", self, other)
+        return CUDA_OPS.elem_op("add", self, other)
 
     def __mul__(self, other: Self | int | float):
-        return CUDA_OPS.bin_op("mul", self, other)
+        return CUDA_OPS.elem_op("mul", self, other)
 
     def __sub__(self, other: Self | int | float):
-        return CUDA_OPS.bin_op("sub", self, other)
+        return CUDA_OPS.elem_op("sub", self, other)
 
     def __truediv__(self, other: Self | int | float):
-        return CUDA_OPS.bin_op("div", self, other, floating_op=True)
+        return CUDA_OPS.elem_op("div", self, other, floating_op=True)
 
     def exp(self):
         return CUDA_OPS.uop("exp", self)
@@ -264,7 +264,12 @@ class CUDA_OPS:
     _kernels = _cuda_ops
 
     @classmethod
-    def elem_op(cls, op_name, a: Tensor, b: Tensor, floating_op: bool):
+    def elem_op(cls, op_name, a: Tensor, b: Tensor | int | float, floating_op=False):
+        assert isinstance(a, Tensor)
+        if isinstance(b, (int, float)):
+            b = Tensor.from_numpy(np.array(b, dtype=a.dtype)).to(a.device)
+            b = b.expand(*a.shape)
+
         out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
         kernel = cls._kernels[elemwise_op_name(
             op_name, a.dtype, b.dtype, out_dtype)]
@@ -288,29 +293,6 @@ class CUDA_OPS:
             c.data.ptr, c_stride,  # type: ignore
             shape,
             ndim
-        )
-        return c
-
-    @classmethod
-    def _bin_op(cls, op_name, a: Tensor, b: int | float, floating_op: bool):
-        b_type = "int32"if isinstance(b, int)else "float32"
-        out_dtype = np.dtype(promote_dtype(a.dtype, b_type, floating_op))
-        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
-
-        assert a.device == "cuda"
-        assert c.device == "cuda"
-        kernel = cls._kernels[bin_op_name(op_name, a.dtype, b_type, out_dtype)]
-
-        ndim = len(a.shape)
-        shape = np.array(a.shape, dtype=np.int32)
-        a_stride = np.array(a.stride, dtype=np.int32)
-        c_stride = np.array(c.stride, dtype=np.int32)
-        kernel(
-            a.data.ptr, a_stride,  # type: ignore
-            b,
-            c.data.ptr,  c_stride,  # type: ignore
-            shape,
-            ndim,
         )
         return c
 
@@ -386,13 +368,6 @@ class CUDA_OPS:
             keepdim,
         )
         return c
-
-    @classmethod
-    def bin_op(cls, op: str, a: Tensor, b: Tensor | int | float, floating_op=False):
-        assert isinstance(a, Tensor)
-        if isinstance(b, Tensor):
-            return cls.elem_op(op, a, b, floating_op=floating_op)
-        return cls._bin_op(op, a, b, floating_op=floating_op)
 
     @classmethod
     def matmul(cls, a: Tensor, b: Tensor):

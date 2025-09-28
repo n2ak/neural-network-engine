@@ -137,6 +137,7 @@ def test_uops():
 
 
 def test_matmul():
+    T.manual_seed(0)
     a = T.randn(3, 5, 7)
     b = T.randn(7, 9)
 

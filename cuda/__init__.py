@@ -87,7 +87,6 @@ _cuda = ctypes.CDLL("libcudart.so", mode=RTLD_GLOBAL)
 
 def get_cuda_code():
     uops = "\n\n".join(map(lambda v: uops_code(*v), UOPS))
-    bin_op = "\n\n".join(map(lambda v: bin_ops_code(*v), BIN_OPS))
     reduce_ops = "\n\n".join(map(lambda v: reduce_axis_code(*v), REDUCE_OPS))
     reduction_ops = "\n\n".join(
         map(lambda v: reduction_op_code(*v), REDUCE_OPS))
@@ -100,7 +99,6 @@ def get_cuda_code():
         reduce_ops,
         reduction_ops,
         elemwise_ops,
-        bin_op,
         uops,
     ])
     return code
@@ -210,9 +208,10 @@ lib = compile_cuda(get_cuda_code(), "cuda_code")
 def register_ops():
     ops = {}
     register_elemwise_ops(lib, ops)
-    register_bin_ops(lib, ops)
     register_uops(lib, ops)
     register_reduce_ops(lib, ops)
+    ops["matmul_3D_2d"] = define_matmul(lib)
+
     return ops
 
 
