@@ -36,12 +36,12 @@ void copy_out(
         totalSize
     );
 }
-#define COPY_OUT(T)                                                  \
-    extern "C" void copy_out_##T(                                     \
+#define COPY_OUT(T)                                                 \
+    extern "C" void copy_out_##T(                                   \
         const T * d_A, const int * shape_A,const int * stride_A,    \
-        T * d_C,                                                     \
-        int ndim_A                                                      \
-    ){copy_out(d_A, shape_A, stride_A, d_C, ndim_A);}                    \
+        T * d_C,                                                    \
+        int ndim_A                                                  \
+    ){copy_out(d_A, shape_A, stride_A, d_C, ndim_A);}               \
 
 COPY_OUT(int32)
 COPY_OUT(int64)
