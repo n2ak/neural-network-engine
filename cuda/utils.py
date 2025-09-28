@@ -28,3 +28,10 @@ def promote_dtype(dtype1, dtype2, floating_op: bool) -> str:
     if dt1 == np.int64 or dt2 == np.int64:
         return "int64"
     return dtype1 if dt1.itemsize >= dt2.itemsize else dtype2
+
+
+def read_cuda_source():
+    import pathlib
+    path = pathlib.Path(__file__).parent / "csrc/reduction.cu"
+    source = open(path).read()
+    return source

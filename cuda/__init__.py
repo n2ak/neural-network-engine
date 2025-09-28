@@ -9,13 +9,14 @@ from ._bin_ops import *
 from ._unary_ops import *
 from ._reduce_ops import *
 from ._elemwsie_ops import *
-from .utils import _define_func, assert_cuda_error
+from .utils import _define_func, assert_cuda_error, read_cuda_source
 
 MAX_DIMS = 4
 HEADER = f"""
 #include <cuda_runtime.h>
 #include <stdio.h>
 
+#define BLOCK_SIZE 1024
 #define MAX_DIMS {MAX_DIMS}
 #define float32 float
 #define float64 double
@@ -92,9 +93,11 @@ def get_cuda_code():
     reduction_ops = "\n\n".join(
         map(lambda v: reduction_op_code(*v), REDUCE_OPS))
     elemwise_ops = "\n\n".join(map(lambda v: elemwise_code(*v), ELEMWISE_OPS))
+    source = read_cuda_source()
 
-    return "\n".join([
+    code = "\n".join([
         HEADER,
+        source,
         matmul,
         reduce_ops,
         reduction_ops,
@@ -102,6 +105,7 @@ def get_cuda_code():
         bin_op,
         uops,
     ])
+    return code
 
 
 class Buffer:
