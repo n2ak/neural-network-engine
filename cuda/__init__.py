@@ -11,7 +11,8 @@ from ._elemwsie_ops import element_wise_source_code, register_elemwise_ops
 from .utils import read_cuda_source
 
 
-nvcc_path = "/usr/local/cuda-12.8/bin/nvcc"
+nvcc_path = os.getenv("NVCC_PATH", "/usr/local/cuda-12.8/bin/nvcc")
+assert os.path.exists(nvcc_path), "NVCC not found"
 
 
 def get_cuda_code():
