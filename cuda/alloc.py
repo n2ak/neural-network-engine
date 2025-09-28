@@ -4,6 +4,7 @@ import ctypes
 import numpy as np
 from ctypes import c_int, c_void_p, POINTER, c_size_t, byref
 from .utils import _define_func, assert_cuda_error
+from typing import Optional
 
 
 # for the compiling and running? runtimes to be the same
@@ -11,24 +12,62 @@ _cuda = ctypes.CDLL("libcudart.so", mode=ctypes.RTLD_GLOBAL)
 
 
 class Buffer:
-    def __init__(self, nbytes: int, allocated=False):
-        ptr = c_void_p()
-        err = CudaAllocator.alloc(byref(ptr), nbytes)
-        assert_cuda_error(err)
+    @property
+    def nbytes(self): return get_nbytes(self.shape, self.stride, self.dtype)
+
+    def __init__(self, ptr: c_void_p, shape: tuple[int, ...], stride: tuple[int, ...], dtype: np.typing.DTypeLike, view=False, parent: Optional["Buffer"] = None):
+        assert isinstance(shape, (tuple, list)), (type(shape), shape)
+
         self.ptr = ptr
-        self.nbytes = nbytes
-        self.allocated = allocated
+        self.shape = shape
+        self.stride = stride
+        self.dtype = np.dtype(dtype)
+        self.is_view = view
         self.refcount = 1
 
+        self.parent = parent
+
+    @classmethod
+    def new(cls, shape: tuple[int, ...], stride: tuple[int, ...], dtype: np.typing.DTypeLike):
+        ptr = c_void_p()
+        assert_cuda_error(CudaAllocator.alloc(
+            byref(ptr), get_nbytes(shape, stride, dtype)))
+        buff = Buffer(
+            ptr,
+            shape=shape,
+            stride=stride,
+            dtype=dtype
+        )
+        return buff
+
     def free(self):
+        if self.is_view:
+            return
         self.refcount -= 1
         if self.refcount <= 0:
             CudaAllocator._free(self.ptr)
             CudaAllocator.mem -= self.nbytes
 
-    def ref(self):
+    def _as_view(self, shape, stride, offset=0):  # offset in items
         self.refcount += 1
-        return self
+
+        def ptr_offset(ptr: c_void_p):
+            assert ptr.value is not None
+            return c_void_p(ptr.value + offset*self.dtype.itemsize)
+
+        parent = self if not self.is_view else self.parent
+        assert parent is not None
+
+        buff = Buffer(
+            ptr=ptr_offset(self.ptr),
+            shape=shape,
+            stride=stride,
+            dtype=self.dtype,
+            view=True,
+            parent=parent
+        )
+        assert buff.nbytes <= buff.parent.nbytes  # type: ignore
+        return buff
 
 
 class CudaAllocator:
@@ -45,16 +84,16 @@ class CudaAllocator:
     mem = 0
 
     @classmethod
-    def alloc_empty(cls, shape, dtype: np.typing.DTypeLike) -> Buffer:
-        buffer = Buffer(np.dtype(dtype).itemsize *
-                        np.prod(shape, dtype=int), allocated=True)
+    def alloc_empty(cls, shape, stride, dtype: np.typing.DTypeLike) -> Buffer:
+        buffer = Buffer.new(shape, stride, dtype)
         # print(f"Allocated {buffer.nbytes} bytes")
         cls.mem += buffer.nbytes
         return buffer
 
     @classmethod
     def to_cuda(cls, host_array: np.typing.NDArray):
-        buffer = cls.alloc_empty(host_array.shape, host_array.dtype)
+        buffer = cls.alloc_empty(host_array.shape, [
+                                 s//host_array.itemsize for s in host_array.strides], host_array.dtype)
         err = cls.memcpy(
             buffer.ptr,
             host_array.ctypes.data_as(c_void_p),
@@ -68,22 +107,22 @@ class CudaAllocator:
     def from_cuda(cls, buffer: Buffer, shape, dtype, stride):
         assert buffer.refcount > 0
         assert isinstance(buffer, Buffer)
-        assert buffer.allocated
+        assert not buffer.is_view
 
         arr = np.empty(shape, dtype=dtype)
 
         nbytes = get_nbytes(shape, stride, dtype)
-        # TODO: do this only if stride and shape dont correspond
-        arr = np.lib.stride_tricks.as_strided(
-            arr, shape=shape, strides=[s * arr.itemsize for s in stride]
-        )
-
+        # TODO: do this only if not contiguous
         cls.synchronize()
         err = cls.memcpy(
             arr.ctypes.data_as(c_void_p),
             buffer.ptr,
+            # buffer.nbytes,
             nbytes,
             cls._cudaMemcpyDeviceToHost
+        )
+        arr = np.lib.stride_tricks.as_strided(
+            arr, shape=shape, strides=[s * arr.itemsize for s in stride]
         )
         assert_cuda_error(err)
         return arr
@@ -98,7 +137,7 @@ class CudaAllocator:
         buffer.free()
 
 
-def get_nbytes(shape, stride, dtype):
+def get_nbytes(shape: tuple[int, ...], stride: tuple[int, ...], dtype: np.typing.DTypeLike):
     itemsize = np.dtype(dtype).itemsize
     size = 1
     for i in range(len(shape)):

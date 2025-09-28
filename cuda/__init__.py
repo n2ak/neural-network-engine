@@ -4,7 +4,7 @@ import ctypes
 import tempfile
 import subprocess
 
-from ._bin_ops import define_matmul
+from ._bin_ops import define_matmul, define_copyout
 from ._unary_ops import unary_ops_source_code, register_uops
 from ._reduce_ops import reduction_ops_source_code, register_reduce_ops
 from ._elemwsie_ops import element_wise_source_code, register_elemwise_ops
@@ -50,7 +50,7 @@ def compile():
     register_uops(lib, ops)
     register_reduce_ops(lib, ops)
     ops["matmul_3D_2d"] = define_matmul(lib)
-
+    define_copyout(lib, ops)
     return ops
 
 

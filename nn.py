@@ -6,7 +6,6 @@ T = TypeVar("T")
 
 
 def is_instance_or_subclass(obj: Any, cls: type) -> bool:
-    print(obj.__class__, cls)
     return isinstance(obj, cls) or issubclass(obj.__class__, cls)
 
 

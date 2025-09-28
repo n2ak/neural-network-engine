@@ -56,6 +56,32 @@ def test_bin_ops():
             check(func(a, b), func(from_torch(a), b))
 
 
+def test_slicing():
+    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+        T.manual_seed(0)
+        shape = (70, 5, 90)
+        a = T.randn(*shape).to(dtype)
+
+        for i, slices in enumerate([
+            (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
+            (slice(None, 2, 3), slice(0, 10, 3), slice(2, None, 4)),
+            (slice(None, None, 3), slice(0, 10, None), slice(None, None, 4)),
+        ]):
+            print(i+1, dtype)
+            # contiguous=True tensor.numpy() returns a contiguous
+            check(a[slices], from_torch(a)[slices], contiguous=True)
+
+        for i, slices in enumerate([
+            (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
+            (slice(None, 2, 3), slice(0, 10, 3), slice(2, None, 4)),
+            (slice(None, None, 3), slice(0, 10, None), slice(None, None, 4)),
+        ]):
+            print(i+1, dtype)
+            # contiguous=True tensor.numpy() returns a contiguous
+            check(a[1:, :3][slices], from_torch(a)[
+                  1:, :3][slices], contiguous=True)
+
+
 def test_reduce_axis_ops():
     for keepdim in [False]:  # TODO: add True
         for dtype in [T.float32, T.float64, T.int32, T.int64]:
@@ -133,7 +159,7 @@ def test_uops():
         a = (T.randn(*shape)+10).to(dtype)
         for opname, func in ops:
             print(opname)
-            check(func(a), func(from_torch(a)))
+            check(func(a), func(from_torch(a)), contiguous=True)
 
 
 def test_matmul():

@@ -72,9 +72,18 @@ class Tensor:
             stride=self.stride,
         )
 
-    def cpu(self):
+    def cpu(self) -> "Tensor":
         if self.is_cpu:
             return self
+        if self.data.is_view:  # type: ignore
+            assert self.data.parent is not None  # type: ignore
+            dst = Tensor.empty(
+                self.shape,
+                device=self.device,
+                dtype=self.dtype,
+            )
+            CUDA_OPS.copy_to(self.data, dst)  # type: ignore
+            return dst.cpu()
         data = CudaAllocator.from_cuda(
             self.data, self.shape, self.dtype, stride=self.stride)  # type: ignore
         return Tensor(
@@ -95,7 +104,8 @@ class Tensor:
     def empty(cls, shape, device="cpu", dtype: np.typing.DTypeLike = np.float32, ):
         stride = None
         if device == "cuda":
-            data = CudaAllocator.alloc_empty(shape=shape, dtype=dtype)
+            data = CudaAllocator.alloc_empty(
+                shape=shape, stride=stride_from_shape(shape), dtype=dtype)
             stride = stride_from_shape(shape)
         else:
             data = np.empty(shape, dtype=dtype)
@@ -196,13 +206,7 @@ class Tensor:
         assert self.is_cuda
         new_stride = [self.stride[d] for d in dims]
         new_shape = [self.shape[d] for d in dims]
-        return Tensor(
-            data=self.data.ref(),  # type: ignore
-            dtype=self.dtype,
-            shape=new_shape,
-            stride=new_stride,
-            device=self.device
-        )
+        return self._as_view(new_shape, new_stride)
 
     def contiguous(self):
         assert self.is_cuda
@@ -224,6 +228,9 @@ class Tensor:
         return True
 
     def try_broadcast(self, other: Self):
+        if self.shape == other.shape:
+            return self, other
+
         assert self._broadcastable(other)
         if self.ndim < other.ndim:
             pass
@@ -250,17 +257,57 @@ class Tensor:
                     raise Exception(f"dimension at {i} should be 1")
                 expected_stride[i] = 0
         expected_stride = expected_stride[::-1]
+        return self._as_view(new_shape, expected_stride)
 
+    def _as_view(self, shape, stride, ptr_offset=0):
+        assert self.is_cuda
+        assert isinstance(self.data, Buffer)
         return Tensor(
-            data=self.data.ref(),  # type: ignore
+            data=self.data._as_view(
+                shape, stride, offset=ptr_offset),  # type: ignore
             dtype=self.dtype,
-            shape=new_shape,
-            stride=expected_stride,
-            device=self.device
+            shape=shape,
+            stride=stride,
+            device=self.device,
         )
 
     def __matmul__(self, other: Self):
         return CUDA_OPS.matmul(self, other)
+
+    def __getitem__(self, slices: tuple[slice, ...]):
+        import math
+        shape = self.shape
+        stride = self.stride
+
+        assert isinstance(slices, tuple), type(slices)
+        assert all(map(lambda s: isinstance(s, slice), slices))
+        if len(slices) < self.ndim:
+            left = self.ndim - len(slices)
+            slices = tuple(list(slices) + [slice(None) for _ in range(left)])
+        assert len(slices) == self.ndim
+
+        slices = tuple(
+            slice(
+                np.clip(s.start or 0, 0, dim).item(),
+                np.clip(s.stop or dim, 0, dim).item(),
+                s.step or 1
+            ) for dim, s in zip(shape, slices)
+        )
+        offset = sum(slice.start * s for s, slice in zip(stride, slices))
+
+        # max for non negative dimensions
+        new_shape = tuple(max(0, math.ceil((s.stop - s.start)/s.step))
+                          for s in slices)
+        # include last stride?
+        # new_stride = tuple([s * slice_.step for s, slice_ in zip(stride[:-1], slices)] + [stride[-1]])
+        new_stride = tuple(
+            [s * slice_.step for s, slice_ in zip(stride, slices)])
+
+        return self._as_view(
+            shape=new_shape,
+            stride=new_stride,
+            ptr_offset=offset
+        )
 
 
 class CUDA_OPS:
@@ -412,3 +459,40 @@ class CUDA_OPS:
             BATCH, M, K, N,
         )
         return out
+
+    @classmethod
+    def copy_out(cls, src: Tensor, dst: Tensor):
+        assert src.is_cuda and dst.is_cuda
+        kernel = cls._kernels["matmul_3D_2d"]
+
+        src_shape = np.array(src.shape, dtype=np.int32)
+        dst_shape = np.array(dst.shape, dtype=np.int32)
+        src_stride = np.array(src.stride, dtype=np.int32)
+        dst_stride = np.array(dst.stride, dtype=np.int32)
+
+        kernel(
+            src.data.ptr, src_shape, src_stride,  # type: ignore
+            dst.data.ptr, dst_shape, dst_stride,  # type: ignore
+            src.ndim,
+            dst.ndim,
+        )
+        return dst
+
+    @classmethod
+    def copy_to(cls, data: Buffer, dst: Tensor):
+        assert dst.is_cuda
+        kernel_name = f"copy_out_{dst.dtype}"
+        kernel = cls._kernels[kernel_name]
+
+        src_shape = np.array(data.shape, dtype=np.int32)
+        src_stride = np.array(data.stride, dtype=np.int32)
+
+        # dst_shape = np.array(dst.shape, dtype=np.int32)
+        # dst_stride = np.array(dst.stride, dtype=np.int32)
+
+        kernel(
+            data.ptr, src_shape, src_stride,  # type: ignore
+            dst.data.ptr,   # type: ignore
+            dst.ndim,
+        )
+        return dst

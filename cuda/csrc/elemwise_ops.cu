@@ -55,7 +55,7 @@ void element_wise(
     int *d_stride_B; shapeToDevice(stride_B,&d_stride_B,ndim);
     int *d_stride_C; shapeToDevice(stride_C,&d_stride_C,ndim);
 
-    int blockSize = 256;
+    int blockSize = BLOCK_SIZE;
     int gridSize = (totalSize + blockSize - 1) / blockSize;
     element_wise_kernel<<<gridSize, blockSize>>>(
         d_a, d_stride_A,
