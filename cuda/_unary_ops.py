@@ -44,16 +44,8 @@ def promote_uop_dtype(input_dtype, floating_operation):
     return np.dtype(out_dtype)
 
 
-op_nums = {
-    "exp": "_UOP_EXP",
-    "log": "_UOP_LOG",
-    "log2": "_UOP_LOG2",
-}
-
-
-def uops_code(name, floating_operation: bool, *dtypes: str):
-    op = name
-    op_num = op_nums[op]
+def uops_code(name: str, floating_operation: bool, *dtypes: str):
+    op_num = f"_UOP_{name.upper()}"
 
     def uop(input_dtype: str):
         out_dtype = promote_uop_dtype(input_dtype, floating_operation)

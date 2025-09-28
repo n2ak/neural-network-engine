@@ -36,63 +36,31 @@ def register_elemwise_ops(lib: ctypes.CDLL, ops: dict):
                 ops[opname] = define_elemwise_op(lib, opname)
 
 
-def elemwise_code(name, floating_op: bool, *dtypes: str):
-    op = "_" + name
+def elemwise_code(name: str, floating_op: bool, *dtypes: str):
+    op_num = f"_EW_{name.upper()}"
 
     def elem_op_code_dype(input_dtype1, input_dtype2):
         out_dtype = promote_dtype(input_dtype1, input_dtype2, floating_op)
         func_name = elemwise_op_name(
             name, input_dtype1, input_dtype2, out_dtype)
-        kernel_name = f"{func_name}_kernel"
         code = f"""
-extern "C" __global__
-void {kernel_name}(
-    const {input_dtype1}* A, const int* stride_A,
-    const {input_dtype2}* B, const int* stride_B,
-    {out_dtype}* C, const int* stride_C,
-    const int* shape,
-    int ndim,
-    int totalSize
-) {{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= totalSize) return;
-
-    int coords[MAX_DIMS];
-    unravel_index(idx, shape, ndim, coords);
-
-    int flat_A = flattenIndex(ndim, coords, stride_A);
-    int flat_B = flattenIndex(ndim, coords, stride_B);
-    int flat_C = flattenIndex(ndim, coords, stride_C);
-
-
-    C[flat_C] = {op}(({out_dtype})A[flat_A] ,({out_dtype}) B[flat_B]);
-}}
-extern "C" void
-{func_name}(
-    const {input_dtype1} *d_a, const int* stride_A,
-    const {input_dtype2} *d_b, const int* stride_B,
-    {out_dtype} *d_c, const int* stride_C,
-    int* shape,
-    int ndim
-){{
-    int totalSize = _size(shape,ndim);
-    int *d_shape; shapeToDevice(shape,&d_shape,ndim);
-    int *d_stride_A; shapeToDevice(stride_A,&d_stride_A,ndim);
-    int *d_stride_B; shapeToDevice(stride_B,&d_stride_B,ndim);
-    int *d_stride_C; shapeToDevice(stride_C,&d_stride_C,ndim);
-
-    int blockSize = 256;
-    int gridSize = (totalSize + blockSize - 1) / blockSize;
-    {kernel_name}<<<gridSize, blockSize>>>(
-        d_a, d_stride_A,
-        d_b, d_stride_B,
-        d_c, d_stride_C,
-        d_shape,
-        ndim,
-        totalSize
-    );
-}}
-    """
+        extern "C" void {func_name}(
+            const {input_dtype1} *A, const int* stride_A,
+            const {input_dtype2} *B, const int* stride_B,
+            {out_dtype} *C, const int* stride_C,
+            const int* shape,
+            int ndim
+        ){{
+            element_wise(
+                A, stride_A,
+                B, stride_B,
+                C, stride_C,
+                shape,
+                ndim,
+                {op_num}
+            );
+        }}
+        """
         return code
     assert len(dtypes) > 0
 

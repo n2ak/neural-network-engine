@@ -41,12 +41,6 @@ def define_reducction_op(lib: ctypes.CDLL, name: str):
     ], None)
 
 
-reductions = {
-    "sum": "_SUM_REDUCTION",
-    "max": "_MAX_REDUCTION",
-}
-
-
 def register_reduce_ops(lib: ctypes.CDLL, ops: dict):
     for name, *dtypes in REDUCE_OPS:
         for (in_dtype, out_dtypes) in dtypes:
@@ -57,10 +51,8 @@ def register_reduce_ops(lib: ctypes.CDLL, ops: dict):
             ops[opname2] = define_reducction_op(lib, opname2)
 
 
-def reduce_axis_code(name, *dtypes: tuple[str, str]):
-    op = name
-
-    reduction = reductions[op]
+def reduce_axis_code(name: str, *dtypes: tuple[str, str]):
+    reduction = f"_{name.upper()}_REDUCTION"
 
     def reduceop(types: tuple[str, str]):
         input_dtype, out_dtype = types
@@ -90,9 +82,8 @@ def reduce_axis_code(name, *dtypes: tuple[str, str]):
     return "\n\n".join(map(reduceop, dtypes))
 
 
-def reduction_op_code(name, *dtypes: tuple[str, str]):
-    op = name
-    reduction = reductions[op]
+def reduction_op_code(name: str, *dtypes: tuple[str, str]):
+    reduction = f"_{name.upper()}_REDUCTION"
 
     def reduceop(types: tuple[str, str]):
         input_dtype, out_dtype = types

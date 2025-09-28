@@ -5,7 +5,7 @@ enum __UOP {
 };
 
 template<typename T>
-__device__ inline T __exec_op(T x,int uop){
+__device__ inline T __exec_op(T x,__UOP uop){
     switch(uop){
         case _UOP_EXP:  return exp(x);
         case _UOP_LOG:  return log(x);
@@ -22,7 +22,7 @@ __global__ void unary_op_kernel(
     int ndim,
     int totalSize,
     __UOP uop
-) {{
+) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= totalSize) return;
 
@@ -32,7 +32,7 @@ __global__ void unary_op_kernel(
     int flat_C = flattenIndex(ndim, coords, stride_C);
 
     C[flat_C] = __exec_op((O) A[flat_A], uop);
-}}
+}
 
 template<typename I,typename O>
 void unary_op(
@@ -41,7 +41,7 @@ void unary_op(
     int* shape,
     int ndim,
     __UOP uop
-){{
+){
     int totalSize = _size(shape,ndim);
     int *d_shape; shapeToDevice(shape, &d_shape, ndim);
     int *d_stride_A; shapeToDevice(stride_A, &d_stride_A, ndim);
@@ -57,4 +57,4 @@ void unary_op(
         totalSize,
         uop
     );
-}}
+}
