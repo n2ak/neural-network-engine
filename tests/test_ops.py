@@ -56,7 +56,7 @@ def test_bin_ops():
             check(func(a, b), func(from_torch(a), b))
 
 
-def test_reduce_ops():
+def test_reduce_axis_ops():
     for keepdim in [False]:  # TODO: add True
         for dtype in [T.float32, T.float64, T.int32, T.int64]:
             torch_dtype = T.float32
@@ -77,6 +77,24 @@ def test_reduce_ops():
             for opname, func in ops:
                 print(dtype, opname, keepdim)
                 check(func(a), func(from_torch(a)))
+
+
+def test_reduce_ops():
+    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+        torch_dtype = T.float32
+        if dtype == T.float64:
+            torch_dtype = T.float64
+        ops = [
+            ("sum", lambda x: x.sum()),
+            ("max", lambda x: x.max()),
+            ("mean", lambda x: x.mean(dtype=torch_dtype)
+                if isinstance(x, T.Tensor) else x.mean()),
+        ]
+        shape = (3, 5, 7, 9)
+        a = (T.randn(*shape) - 100).to(dtype)
+        for opname, func in ops:
+            print(dtype, opname)
+            check(func(a), func(from_torch(a)))
 
 
 def test_reduce_ops_no_axis():

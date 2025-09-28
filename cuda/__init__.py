@@ -69,6 +69,7 @@ def compile_cuda(code: str, lib_name="libtemp.so"):
         nvcc_path, "-shared", "-Xcompiler", "-fPIC", cu_path,
         "-o", so_path,
         "-lcudart",
+        "--expt-relaxed-constexpr",  # for host constexpr to be used is device
         "-arch=sm_86",
     ]
     subprocess.check_call(cmd)
@@ -87,13 +88,16 @@ def get_cuda_code():
     matmul = matmul_code()
     uops = "\n\n".join(map(lambda v: uops_code(*v), UOPS))
     bin_op = "\n\n".join(map(lambda v: bin_ops_code(*v), BIN_OPS))
-    reduceops = "\n\n".join(map(lambda v: reduce_code(*v), REDUCE_OPS))
+    reduce_ops = "\n\n".join(map(lambda v: reduce_axis_code(*v), REDUCE_OPS))
+    reduction_ops = "\n\n".join(
+        map(lambda v: reduction_op_code(*v), REDUCE_OPS))
     elemwise_ops = "\n\n".join(map(lambda v: elemwise_code(*v), ELEMWISE_OPS))
 
     return "\n".join([
         HEADER,
         matmul,
-        reduceops,
+        reduce_ops,
+        reduction_ops,
         elemwise_ops,
         bin_op,
         uops,

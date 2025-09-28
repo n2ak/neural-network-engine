@@ -18,6 +18,10 @@ def reduceop_name(name, in_dtype, out_dtype):
     return f"reduce_{name}_{in_dtype}_{out_dtype}"
 
 
+def reduction_op_name(name, in_dtype, out_dtype):
+    return f"reduction_{name}_{in_dtype}_{out_dtype}"
+
+
 def define_reduce_op(lib: ctypes.CDLL, name: str):
     return _define_func(lib[name], [
         c_void_p, _int_1d_array(), _int_1d_array(),  # a
@@ -29,14 +33,25 @@ def define_reduce_op(lib: ctypes.CDLL, name: str):
     ], None)
 
 
+def define_reducction_op(lib: ctypes.CDLL, name: str):
+    return _define_func(lib[name], [
+        c_void_p,  # a
+        c_void_p,  # output
+        c_int,  # totalSize
+    ], None)
+
+
 def register_reduce_ops(lib: ctypes.CDLL, ops: dict):
     for name, *dtypes in REDUCE_OPS:
         for (in_dtype, out_dtypes) in dtypes:
-            opname = reduceop_name(name, in_dtype, out_dtypes)
-            ops[opname] = define_reduce_op(lib, opname)
+            opname1 = reduceop_name(name, in_dtype, out_dtypes)
+            ops[opname1] = define_reduce_op(lib, opname1)
+
+            opname2 = reduction_op_name(name, in_dtype, out_dtypes)
+            ops[opname2] = define_reducction_op(lib, opname2)
 
 
-def reduce_code(name, *dtypes: tuple[str, str]):
+def reduce_axis_code(name, *dtypes: tuple[str, str]):
     op = name
 
     def reduceop(types: tuple[str, str]):
@@ -44,8 +59,8 @@ def reduce_code(name, *dtypes: tuple[str, str]):
         func_name = reduceop_name(name, input_dtype, out_dtype)
         kernel_name = f"{func_name}_kernel"
         code = f"""
-extern "C" __global__
-void {kernel_name}(
+__global__ void 
+{kernel_name}(
     const {input_dtype}* input,
     {out_dtype}* output,
     const int* in_shape,
@@ -119,7 +134,6 @@ extern "C" void
     int keepdim
 ){{
     int totalSize = _size(shape_C, ndim_C);
-
     int *d_axis; shapeToDevice(axis, &d_axis, ndim_A);
 
     int *d_shape_A; shapeToDevice(shape_A, &d_shape_A, ndim_A);
@@ -146,5 +160,72 @@ extern "C" void
 }}
 """
         return code
+    assert len(dtypes) > 0
+    return "\n\n".join(map(reduceop, dtypes))
+
+
+def reduction_op_code(name, *dtypes: tuple[str, str]):
+    op = name
+
+    def reduceop(types: tuple[str, str]):
+        input_dtype, out_dtype = types
+        func_name = reduction_op_name(name, input_dtype, out_dtype)
+        default_value = 0
+        if op == "max":
+            default_value = f"std::numeric_limits<{out_dtype}>::lowest()"
+        kernel_name = f"{func_name}_kernel"
+        code2 = f"""
+
+#define BLK_SIZE 1024
+template<typename I>
+__global__ void
+{kernel_name}(
+    const I* A,
+    {out_dtype}* C,
+    int totalSize
+){{
+    __shared__ {out_dtype} shared[BLK_SIZE];
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if(idx < totalSize) shared[threadIdx.x] = A[idx];
+    else                shared[threadIdx.x] = {default_value}; // TODO: max wont work
+    
+    __syncthreads();
+    
+    for(int s = blockDim.x /2; s > 0 ; s/=2){{ // blockDim.x = BLK_SIZE
+        if(threadIdx.x < s){{
+            shared[threadIdx.x] = {op}(shared[threadIdx.x],shared[threadIdx.x + s]);
+        }}
+        __syncthreads();
+    }}
+    
+    if(threadIdx.x == 0)
+        C[blockIdx.x] = shared[0];
+}}
+extern "C" void
+{func_name}(
+    const {input_dtype}* A,
+    {input_dtype}* C,
+    int totalSize
+){{
+    int blockSize = BLK_SIZE;
+    int gridSize = (totalSize + blockSize - 1) / blockSize;
+
+    {out_dtype}* d_out;
+    cudaMalloc(&d_out, gridSize * sizeof({out_dtype}));
+
+
+    {kernel_name}<<<gridSize, blockSize>>>(    A,d_out, totalSize);
+    
+    while(gridSize > 1){{
+        int size = gridSize;
+        gridSize = (gridSize + blockSize - 1) / blockSize;
+        {kernel_name}<<<gridSize, blockSize>>>(d_out,d_out, size);
+    }}
+    
+    cudaMemcpy(C, d_out, 1 * sizeof({out_dtype}), cudaMemcpyDeviceToHost);
+}}
+"""
+        return code2
     assert len(dtypes) > 0
     return "\n\n".join(map(reduceop, dtypes))

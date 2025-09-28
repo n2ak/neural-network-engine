@@ -1,6 +1,7 @@
+import os
 from typing import Self
 import numpy as np
-from cuda import CudaAllocator, _cuda_ops, bin_op_name, elemwise_op_name, uop_name, reduceop_name, Buffer, promote_dtype, promote_uop_dtype
+from cuda import CudaAllocator, _cuda_ops, bin_op_name, elemwise_op_name, uop_name, reduceop_name, Buffer, promote_dtype, promote_uop_dtype, reduction_op_name
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -182,6 +183,8 @@ class Tensor:
     def is_cuda(self): return self.device == "cuda"
     @property
     def is_cpu(self): return self.device == "cpu"
+    @property
+    def size(self): return np.prod(self.shape, dtype=np.int32).item()
 
     def transpose(self, dim1: int, dim2: int):
         dims = list(range(self.ndim))
@@ -337,9 +340,21 @@ class CUDA_OPS:
 
     @classmethod
     def reduce_op(cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool, out_dtype=None):
-        axis = a._correct_axis(axis)
         if out_dtype is None:
             out_dtype = a.dtype
+
+        if axis == () and (os.getenv("USE_REDUCTION", "1") != "0"):
+            # this is order of 1000s faster
+            kernel = cls._kernels[reduction_op_name(
+                op_name, str(a.dtype), str(out_dtype))]
+            out = Tensor.empty((), device="cuda", dtype=out_dtype)
+            kernel(
+                a.data.ptr,  # type: ignore
+                out.data.ptr,  # type: ignore
+                a.size
+            )
+            return out
+        axis = a._correct_axis(axis)
 
         def get_shape(shape: list[int]):
             if axis == ():
