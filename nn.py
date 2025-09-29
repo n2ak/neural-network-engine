@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar, Any
+from typing import Generic, Type, TypeVar, Any
 from abc import ABC, abstractmethod
 from tensor import Tensor
 
@@ -30,7 +30,7 @@ class Module(Generic[T], ABC):
 
     def _load_state(self, member_path: list[str], state):
         raise NotImplementedError(
-            f"class {self} doesn't implement _load_state"
+            f"class {self.__class__.__name__} doesn't implement _load_state"
         )
 
 
@@ -68,3 +68,18 @@ class Linear(Module[Tensor]):
         assert old_tensor.shape == new_tensor.shape, (
             f"Expected shape: {old_tensor.shape} but found: {new_tensor.shape}")
         setattr(self, member, new_tensor)
+
+
+class Sequential(Module[Any]):
+    def __init__(self, *layers: Module) -> None:
+        self.layers = layers
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer.forward(x)
+        return x
+
+    def _load_state(self, member_path: list[str], state):
+        assert member_path[0].isdigit()
+        index = int(member_path[0])
+        self.layers[index]._load_state(member_path[1:], state)
