@@ -1,5 +1,5 @@
 import torch as T
-from _utils import check, from_torch
+from _utils import check, from_torch, from_numpy
 
 
 def test_elemwise_ops():
@@ -57,35 +57,40 @@ def test_bin_ops():
 
 
 def test_slicing():
-    for dtype in [T.float32, T.float64, T.int32, T.int64]:
-        T.manual_seed(0)
+    import numpy as np
+    for dtype in [np.float32, np.float64, np.int32, np.int64]:
+        np.random.seed(0)
         shape = (70, 5, 90)
-        a = T.randn(*shape).to(dtype)
+        a = np.random.randn(*shape).astype(dtype)
 
         for i, slices in enumerate([
             (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
             (slice(None, 2, 3), slice(0, 10, 3), slice(2, None, 4)),
             (slice(None, None, 3), slice(0, 10, None), slice(None, None, 4)),
+            (slice(100, 3, None), slice(100, None, 2), slice(4, None, 2))
         ]):
             print(i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check(a[slices], from_torch(a)[slices])
+            check(a[slices], from_numpy(a)[slices])
 
 
 def test_nested_slicing():
-    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+    import numpy as np
+    for dtype in [np.float32, np.float64, np.int32, np.int64]:
+        np.random.seed(0)
         T.manual_seed(0)
         shape = (70, 5, 90)
-        a = T.randn(*shape).to(dtype)
+        a = np.random.randn(*shape).astype(dtype)
 
         for i, slices in enumerate([
             (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
             (slice(None, 2, 3), slice(0, 10, 3), slice(2, None, 4)),
             (slice(None, None, 3), slice(0, 10, None), slice(None, None, 4)),
+            (slice(100, 3, None), slice(100, None, 2), slice(4, None, 2))
         ]):
             print(i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check(a[1:, :3][slices], from_torch(a)[
+            check(a[1:, :3][slices], from_numpy(a)[
                   1:, :3][slices])
 
 

@@ -3,13 +3,13 @@ import numpy as np
 from tensor import Tensor
 
 
-def check(a1: T.Tensor, a2: Tensor, rtol=1e-05, atol=1e-08):
-    assert isinstance(a1, T.Tensor), type(a1)
+def check(a1: T.Tensor | np.typing.NDArray, a2: Tensor, rtol=1e-05, atol=1e-08):
+    assert isinstance(a1, (T.Tensor, np.ndarray)), type(a1)
     assert isinstance(a2, Tensor), type(a2)
 
     # assert a1.stride() == a2.stride, (a1.stride(), a2.stride)
 
-    a1_numpy = a1.numpy(force=True)
+    a1_numpy = a1.numpy(force=True) if isinstance(a1, T.Tensor)else a1
     a2_numpy = a2.numpy()
 
     # if contiguous:
@@ -30,3 +30,4 @@ def check(a1: T.Tensor, a2: Tensor, rtol=1e-05, atol=1e-08):
 
 
 def from_torch(a: T.Tensor): return Tensor.from_numpy(a.numpy())
+def from_numpy(a: np.typing.NDArray): return Tensor.from_numpy(a)
