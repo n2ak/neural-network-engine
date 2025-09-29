@@ -137,7 +137,7 @@ def test_view_offset():
 
 
 def test_reduce_axis_ops():
-    for keepdim in [False]:  # TODO: add True
+    for keepdim in [True, False]:  # TODO: add True
         for dtype in [T.float32, T.float64, T.int32, T.int64]:
             torch_dtype = T.float32
             if dtype == T.float64:
@@ -202,6 +202,18 @@ def test_uops():
             ("exp", lambda x: x.exp()),
             ("log", lambda x: x.log()),
             ("log2", lambda x: x.log2()),
+        ]
+        shape = (3, 5, 7)
+        a = (T.randn(*shape)+10).to(dtype)
+        for opname, func in ops:
+            print(opname)
+            check(func(a), func(from_torch(a)))
+
+
+def test_views():
+    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+        ops = [
+            ("view", lambda x: x.view(*view_shape)),
             ("expand", lambda x: x.expand(*expand_shape)),
             ("transpose", lambda x: x.transpose(*T_shape)),
             ("permute", lambda x: x.permute(*permute_shape)),
@@ -210,6 +222,7 @@ def test_uops():
         T_shape = 2, 1
         permute_shape = (1, 2, 0)
         expand_shape = 2, 3, 3, 5, 7
+        view_shape = 5, 7, 3
         a = (T.randn(*shape)+10).to(dtype)
         for opname, func in ops:
             print(opname)

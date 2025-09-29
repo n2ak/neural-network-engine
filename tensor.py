@@ -217,6 +217,16 @@ class Tensor:
         expected_stride = expected_stride[::-1]
         return self._as_view(new_shape, expected_stride)
 
+    def view(self, *dims: int):
+        if self.shape == dims:
+            return self
+        assert np.prod(dims) == self.size
+        assert self.is_contiguous
+        return self._as_view(
+            dims,
+            stride_from_shape(dims)
+        )
+
     def _as_view(self, shape, stride, ptr_offset=0, slice=None):
         return Tensor(
             data=self.data._as_view(
@@ -356,7 +366,7 @@ class CUDA_OPS:
             return out
         axis = a._correct_axis(axis)
 
-        def get_shape(shape: list[int]):
+        def get_shape(shape: list[int], keepdim):
             if axis == ():
                 return ()
             i = 0
@@ -370,7 +380,8 @@ class CUDA_OPS:
 
         kernel = cls._kernels[reduceop_name(
             op_name, str(a.dtype), str(out_dtype))]
-        c = Tensor.empty(get_shape(list(a.shape)), dtype=out_dtype)
+        c = Tensor.empty(
+            get_shape(list(a.shape), keepdim=False), dtype=out_dtype)
 
         a_shape = np.array(a.shape, dtype=np.int32)
         c_shape = np.array(c.shape, dtype=np.int32)
@@ -386,7 +397,7 @@ class CUDA_OPS:
             len(axis),
             keepdim,
         )
-        return c
+        return c.view(*get_shape(list(a.shape), keepdim=keepdim))
 
     @classmethod
     def matmul(cls, a: Tensor, b: Tensor):
