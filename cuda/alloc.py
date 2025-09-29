@@ -15,17 +15,27 @@ class Buffer:
     @property
     def nbytes(self): return get_nbytes(self.shape, self.stride, self.dtype)
 
-    def __init__(self, ptr: c_void_p, shape: tuple[int, ...], stride: tuple[int, ...], dtype: np.typing.DTypeLike, view=False, parent: Optional["Buffer"] = None):
+    def __init__(self, ptr: c_void_p, shape: tuple[int, ...], stride: tuple[int, ...], dtype: np.typing.DTypeLike, view=False, parent: Optional["Buffer"] = None, slice: Optional[tuple[slice, ...]] = None):
         assert isinstance(shape, (tuple, list)), (type(shape), shape)
 
-        self.ptr = ptr
-        self.shape = shape
-        self.stride = stride
-        self.dtype = np.dtype(dtype)
-        self.is_view = view
-        self.refcount = 1
+        assert dtype is not None
+        assert shape is not None
+        assert stride is not None
 
+        if slice is not None:
+            assert view
+        if view:
+            assert parent is not None
+
+        self.shape = tuple(shape)
+        self.stride = tuple(stride)
+        self.dtype = np.dtype(dtype)
+
+        self.ptr = ptr
+        self.refcount = 1
+        self.is_view = view
         self.parent = parent
+        self._slice = slice
 
     @classmethod
     def new(cls, shape: tuple[int, ...], stride: tuple[int, ...], dtype: np.typing.DTypeLike):
@@ -48,26 +58,36 @@ class Buffer:
             CudaAllocator._free(self.ptr)
             CudaAllocator.mem -= self.nbytes
 
-    def _as_view(self, shape, stride, offset=0):  # offset in items
+    def _as_view(self, shape, stride, offset, slice):  # offset in items
         self.refcount += 1
+        ptr_offset = c_void_p(self.ptr.value + offset*self.dtype.itemsize)
 
-        def ptr_offset(ptr: c_void_p):
-            assert ptr.value is not None
-            return c_void_p(ptr.value + offset*self.dtype.itemsize)
-
-        parent = self if not self.is_view else self.parent
+        parent = self
         assert parent is not None
 
         buff = Buffer(
-            ptr=ptr_offset(self.ptr),
+            ptr=ptr_offset,
             shape=shape,
             stride=stride,
             dtype=self.dtype,
             view=True,
-            parent=parent
+            parent=parent,
+            slice=slice
         )
         assert buff.nbytes <= buff.parent.nbytes  # type: ignore
         return buff
+
+    def numpy(self):
+        if self.is_view:
+            assert self.parent is not None
+            if self._slice is not None:
+                return self.parent.numpy()[self._slice]
+            data = CudaAllocator.from_cuda(
+                self.parent, new_shape=self.shape, new_stride=self.stride)
+        else:
+            data = CudaAllocator.from_cuda(self)
+        assert isinstance(data, np.ndarray)
+        return data
 
 
 class CudaAllocator:
@@ -104,27 +124,29 @@ class CudaAllocator:
         return buffer
 
     @classmethod
-    def from_cuda(cls, buffer: Buffer, shape, dtype, stride):
+    def from_cuda(cls, buffer: Buffer, new_shape=None, new_stride=None):
+        # shape, dtype, stride = buffer.shape, buffer.dtype, buffer.stride
         assert buffer.refcount > 0
         assert isinstance(buffer, Buffer)
         assert not buffer.is_view
 
-        arr = np.empty(shape, dtype=dtype)
+        arr = np.empty(buffer.shape, dtype=buffer.dtype)
 
-        nbytes = get_nbytes(shape, stride, dtype)
         # TODO: do this only if not contiguous
         cls.synchronize()
-        err = cls.memcpy(
+        assert_cuda_error(cls.memcpy(
             arr.ctypes.data_as(c_void_p),
             buffer.ptr,
-            # buffer.nbytes,
-            nbytes,
+            buffer.nbytes,
             cls._cudaMemcpyDeviceToHost
-        )
+        ))
+        if new_shape is None and new_stride is None:
+            new_shape = buffer.shape
+            new_stride = buffer.stride
         arr = np.lib.stride_tricks.as_strided(
-            arr, shape=shape, strides=[s * arr.itemsize for s in stride]
+            arr, shape=new_shape, strides=[
+                s * arr.itemsize for s in new_stride]  # type: ignore
         )
-        assert_cuda_error(err)
         return arr
 
     @classmethod

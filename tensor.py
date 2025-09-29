@@ -27,23 +27,15 @@ def as_tuple(input):
 
 class Tensor:
 
-    def __init__(self, data: Buffer | np.typing.NDArray, device, shape=None, dtype=None, stride=None) -> None:
-        assert device in ["cuda", "cpu"]
-
-        self.device = device
-        if isinstance(data, np.ndarray):
-            shape = data.shape
-            dtype = data.dtype
-            stride = get_numpy_stride(data)
-
-        assert stride is not None
-        assert shape is not None
-        assert dtype is not None
-
+    def __init__(self, data: Buffer) -> None:
         self.data = data
-        self.shape: tuple[int, ...] = tuple(shape)  # type: ignore
-        self.stride: tuple[int, ...] = tuple(stride)  # type: ignore
-        self.dtype = np.dtype(dtype)
+
+    @property
+    def shape(self): return self.data.shape
+    @property
+    def stride(self): return self.data.stride
+    @property
+    def dtype(self): return self.data.dtype
 
     @property
     def is_contiguous(self):
@@ -52,99 +44,60 @@ class Tensor:
         return expected_stride == stride
 
     @staticmethod
-    def from_numpy(data):
+    def from_numpy(data: np.typing.NDArray):
         assert isinstance(data, np.ndarray), type(data)
-        return Tensor(data, device="cpu")
+
+        return Tensor(
+            CudaAllocator.to_cuda(data),
+        )
 
     @staticmethod
-    def randn(*shape: int, dtype=np.float32, device="cuda"):
-        return Tensor.from_numpy(np.random.randn(*shape).astype(dtype)).to(device)
+    def randn(*shape: int, dtype=np.float32):
+        return Tensor.from_numpy(np.random.randn(*shape).astype(dtype))
 
-    def cuda(self):
-        if self.is_cuda:
-            return self
-        data = CudaAllocator.to_cuda(self.data)  # type: ignore
-        return Tensor(
-            data,
-            device="cuda",
-            shape=self.shape,
-            dtype=self.dtype,
-            stride=self.stride,
-        )
-
-    def cpu(self) -> "Tensor":
-        if self.is_cpu:
-            return self
-        if self.data.is_view:  # type: ignore
-            assert self.data.parent is not None  # type: ignore
-            dst = Tensor.empty(
-                self.shape,
-                device=self.device,
-                dtype=self.dtype,
-            )
-            CUDA_OPS.copy_to(self.data, dst)  # type: ignore
-            return dst.cpu()
-        data = CudaAllocator.from_cuda(
-            self.data, self.shape, self.dtype, stride=self.stride)  # type: ignore
-        return Tensor(
-            data,
-            device="cpu"
-        )
-
-    def to(self, device: str):
-        if device == self.device:
-            return self
-        if device == "cpu":
-            return self.cpu()
-        if device == "cuda":
-            return self.cuda()
-        raise Exception(f"Invalid device {device}")
+    # def cpu(self) -> "Tensor":
+    #     if self.is_cpu:
+    #         return self
+    #     if self.data.is_view:  # type: ignore
+    #         assert self.data.parent is not None  # type: ignore
+    #         dst = Tensor.empty(
+    #             self.shape,
+    #             dtype=self.dtype,
+    #         )
+    #         CUDA_OPS.copy_to(self.data, dst)  # type: ignore
+    #         return dst.cpu()
+    #     data = CudaAllocator.from_cuda(
+    #         self.data, self.shape, self.dtype, stride=self.stride)  # type: ignore
+    #     return Tensor(
+    #         data,
+    #     )
 
     @classmethod
-    def empty(cls, shape, device="cpu", dtype: np.typing.DTypeLike = np.float32, ):
-        stride = None
-        if device == "cuda":
-            data = CudaAllocator.alloc_empty(
-                shape=shape, stride=stride_from_shape(shape), dtype=dtype)
-            stride = stride_from_shape(shape)
-        else:
-            data = np.empty(shape, dtype=dtype)
+    def empty(cls, shape, dtype: np.typing.DTypeLike = np.float32, ):
+        data = CudaAllocator.alloc_empty(
+            shape=shape, stride=stride_from_shape(shape), dtype=dtype)
+        stride = stride_from_shape(shape)
         return Tensor(
             data,
-            shape=shape,
-            device=device,
-            dtype=dtype,
-            stride=stride,
         )
 
     @classmethod
-    def zeros(cls, shape, device="cpu", dtype=np.float32):
-        return Tensor.from_numpy(np.zeros(shape=shape, dtype=dtype)).to(device=device)
+    def zeros(cls, shape, dtype=np.float32):
+        return Tensor.from_numpy(np.zeros(shape=shape, dtype=dtype))
 
     def astype(self, dtype) -> "Tensor":
         if dtype == self.dtype:
             return self
-        if self.is_cpu:
-            data = self.data.astype(dtype)  # type: ignore
-            return Tensor(
-                data,
-                device="cpu",
-            )
-        else:
-            # TODO: do it in device
-            return self.cpu().astype(dtype).cuda()
+        # TODO: do it in gpu
+        return Tensor.from_numpy(self.numpy().astype(dtype))
 
     def numpy(self) -> np.typing.NDArray:
-        data = self.cpu().data
-        assert isinstance(data, np.ndarray)
+        data = self.data.numpy()
+        assert self.shape == data.shape, (self.shape, data.shape)
         return data
 
     def __del__(self):
-        if self.is_cuda:
-            assert isinstance(self.data, Buffer), type(self.data)
-            CudaAllocator.free(self.data)
-        else:
-            del self.data
+        CudaAllocator.free(self.data)
 
     def __add__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("add", self, other)
@@ -189,10 +142,6 @@ class Tensor:
     @property
     def ndim(self): return len(self.shape)
     @property
-    def is_cuda(self): return self.device == "cuda"
-    @property
-    def is_cpu(self): return self.device == "cpu"
-    @property
     def size(self): return np.prod(self.shape, dtype=np.int32).item()
 
     def transpose(self, dim1: int, dim2: int):
@@ -203,21 +152,16 @@ class Tensor:
         )
 
     def permute(self, *dims: int):
-        assert self.is_cuda
         new_stride = [self.stride[d] for d in dims]
         new_shape = [self.shape[d] for d in dims]
         return self._as_view(new_shape, new_stride)
 
     def contiguous(self):
-        assert self.is_cuda
         if self.is_contiguous:
             return self
         new_stride = stride_from_shape(self.shape)
-        # TODO: do it in device
-        return Tensor(
-            data=np.ascontiguousarray(self.numpy()),
-            device="cpu",
-        ).to(self.device)
+        # TODO: do it in gpu
+        return Tensor.from_numpy(np.ascontiguousarray(self.numpy()))
 
     def _broadcastable(self, other: Self):
         for d1, d2 in zip(self.shape[::-1], other.shape[::-1]):
@@ -247,6 +191,8 @@ class Tensor:
         return self.expand(*expected_shape), other.expand(*expected_shape)
 
     def expand(self, *dims: int):
+        if self.shape == dims:
+            return self
         new_shape = dims
         expected_stride = [0] * len(dims)
         for i, d, sh, s in zip(range(self.ndim), dims[::-1], self.shape[::-1], self.stride[::-1]):
@@ -259,54 +205,58 @@ class Tensor:
         expected_stride = expected_stride[::-1]
         return self._as_view(new_shape, expected_stride)
 
-    def _as_view(self, shape, stride, ptr_offset=0):
-        assert self.is_cuda
-        assert isinstance(self.data, Buffer)
+    def _as_view(self, shape, stride, ptr_offset=0, slice=None):
         return Tensor(
             data=self.data._as_view(
-                shape, stride, offset=ptr_offset),  # type: ignore
-            dtype=self.dtype,
-            shape=shape,
-            stride=stride,
-            device=self.device,
+                shape, stride, offset=ptr_offset, slice=slice),  # type: ignore
         )
 
     def __matmul__(self, other: Self):
         return CUDA_OPS.matmul(self, other)
 
-    def __getitem__(self, slices: tuple[slice, ...]):
-        import math
+    def __getitem__(self, keys):
         shape = self.shape
         stride = self.stride
 
-        assert isinstance(slices, tuple), type(slices)
-        assert all(map(lambda s: isinstance(s, slice), slices))
-        if len(slices) < self.ndim:
-            left = self.ndim - len(slices)
-            slices = tuple(list(slices) + [slice(None) for _ in range(left)])
-        assert len(slices) == self.ndim
+        assert isinstance(keys, tuple), type(keys)
+        assert all(map(lambda s: isinstance(s, slice), keys))
+        if len(keys) < self.ndim:
+            left = self.ndim - len(keys)
+            keys = tuple(list(keys) + [slice(None) for _ in range(left)])
+        assert len(keys) == self.ndim
 
-        slices = tuple(
-            slice(
-                np.clip(s.start or 0, 0, dim).item(),
-                np.clip(s.stop or dim, 0, dim).item(),
-                s.step or 1
-            ) for dim, s in zip(shape, slices)
-        )
-        offset = sum(slice.start * s for s, slice in zip(stride, slices))
+        slices: np.ndarray = np.array([(s.start or 0, s.stop or d, s.step or 1)
+                                      for d, s in zip(shape, keys)])
+        # [30:...] and the dim is lower than 30 => we clip
+        slices[:, 1] = np.clip(slices[:, 1], 0, shape)
 
-        # max for non negative dimensions
-        new_shape = tuple(max(0, math.ceil((s.stop - s.start)/s.step))
-                          for s in slices)
-        # include last stride?
-        # new_stride = tuple([s * slice_.step for s, slice_ in zip(stride[:-1], slices)] + [stride[-1]])
-        new_stride = tuple(
-            [s * slice_.step for s, slice_ in zip(stride, slices)])
+        new_shape = np.ceil((slices[:, 1] - slices[:, 0]) / slices[:, 2])
+        # clip negative dimensions
+        new_shape = np.clip(new_shape, 0, shape)
+
+        slices[:, 0] = np.clip(slices[:, 0], 0, np.array(shape))
+        # slices[:, 0] = np.where(slices[:, 0] < shape, slices[:, 0], 0)
+
+        offsets = (slices[:, 0] * stride)
+        # strides at 0 dimensions shouldnt contribute to add offset
+        offsets = np.where(new_shape == 0, 0, offsets)
+        offset = offsets.sum().item()
+
+        new_stride = (slices[:, 2] * stride)
+        # strides at 0 dimensions shouldnt add contribute to stride
+        new_stride = np.where(new_shape == 0, stride, new_stride)
+
+        new_shape = tuple(new_shape.astype(int).tolist())
+        new_stride = tuple(new_stride.astype(int).tolist())
+
+        # print(shape, "shape->", new_shape)
+        # print(stride, "stride->", new_stride)
 
         return self._as_view(
             shape=new_shape,
             stride=new_stride,
-            ptr_offset=offset
+            ptr_offset=offset,
+            slice=keys
         )
 
 
@@ -317,7 +267,7 @@ class CUDA_OPS:
     def elem_op(cls, op_name, a: Tensor, b: Tensor | int | float, floating_op=False):
         assert isinstance(a, Tensor)
         if isinstance(b, (int, float)):
-            b = Tensor.from_numpy(np.array(b, dtype=a.dtype)).to(a.device)
+            b = Tensor.from_numpy(np.array(b, dtype=a.dtype))
             b = b.expand(*a.shape)
 
         out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
@@ -328,10 +278,7 @@ class CUDA_OPS:
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
 
-        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
-        assert a.device == "cuda"
-        assert b.device == "cuda"
-        assert c.device == "cuda"
+        c = Tensor.empty(a.shape, dtype=out_dtype)
 
         a_stride = np.array(a.stride, dtype=np.int32)
         b_stride = np.array(b.stride, dtype=np.int32)
@@ -349,12 +296,10 @@ class CUDA_OPS:
     @classmethod
     def uop(cls, op_name, a: Tensor, floating_op=True):
         out_dtype = promote_uop_dtype(a.dtype, floating_op)
-        c = Tensor.empty(a.shape, device="cuda", dtype=out_dtype)
+        c = Tensor.empty(a.shape, dtype=out_dtype)
         kernel = cls._kernels[uop_name(op_name, a.dtype, out_dtype)]
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
-        assert a.device == "cuda"
-        assert c.device == "cuda"
 
         a_stride = np.array(a.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
@@ -375,7 +320,7 @@ class CUDA_OPS:
             # this is order of 1000s faster
             kernel = cls._kernels[reduction_op_name(
                 op_name, str(a.dtype), str(out_dtype))]
-            out = Tensor.empty((), device="cuda", dtype=out_dtype)
+            out = Tensor.empty((), dtype=out_dtype)
             kernel(
                 a.data.ptr,  # type: ignore
                 out.data.ptr,  # type: ignore
@@ -398,10 +343,7 @@ class CUDA_OPS:
 
         kernel = cls._kernels[reduceop_name(
             op_name, str(a.dtype), str(out_dtype))]
-        c = Tensor.empty(get_shape(list(a.shape)),
-                         device="cuda", dtype=out_dtype)
-        assert a.device == "cuda"
-        assert c.device == "cuda"
+        c = Tensor.empty(get_shape(list(a.shape)), dtype=out_dtype)
 
         a_shape = np.array(a.shape, dtype=np.int32)
         c_shape = np.array(c.shape, dtype=np.int32)
@@ -425,14 +367,12 @@ class CUDA_OPS:
         assert b.ndim == 2
         assert a.shape[-1] == b.shape[0]
         assert a.dtype == b.dtype == np.float32
-        assert a.device == b.device == "cuda"
 
         K, N = b.shape
         if a.ndim == 3:
             BATCH, M, K = a.shape
             out = Tensor.empty(
                 (BATCH, M, N),
-                device="cuda",
                 dtype=np.float32
             )
             a_stride = a.stride
@@ -442,7 +382,6 @@ class CUDA_OPS:
             M, K = a.shape
             out = Tensor.empty(
                 (M, N),
-                device="cuda",
                 dtype=np.float32
             )
             a_stride = [0] + list(a.stride)
@@ -462,8 +401,8 @@ class CUDA_OPS:
 
     @classmethod
     def copy_out(cls, src: Tensor, dst: Tensor):
-        assert src.is_cuda and dst.is_cuda
-        kernel = cls._kernels["matmul_3D_2d"]
+        kernel_name = f"copy_out_{dst.dtype}"
+        kernel = cls._kernels[kernel_name]
 
         src_shape = np.array(src.shape, dtype=np.int32)
         dst_shape = np.array(dst.shape, dtype=np.int32)
@@ -480,7 +419,6 @@ class CUDA_OPS:
 
     @classmethod
     def copy_to(cls, data: Buffer, dst: Tensor):
-        assert dst.is_cuda
         kernel_name = f"copy_out_{dst.dtype}"
         kernel = cls._kernels[kernel_name]
 

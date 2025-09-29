@@ -69,7 +69,14 @@ def test_slicing():
         ]):
             print(i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check(a[slices], from_torch(a)[slices], contiguous=True)
+            check(a[slices], from_torch(a)[slices])
+
+
+def test_nested_slicing():
+    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+        T.manual_seed(0)
+        shape = (70, 5, 90)
+        a = T.randn(*shape).to(dtype)
 
         for i, slices in enumerate([
             (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
@@ -79,7 +86,41 @@ def test_slicing():
             print(i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
             check(a[1:, :3][slices], from_torch(a)[
-                  1:, :3][slices], contiguous=True)
+                  1:, :3][slices])
+
+
+def test_view_offset():
+    import numpy as np
+    from tensor import Tensor
+    slices1 = slice(1, 2, None), slice(2, None, 2), slice(None, None, 4)
+    slices2 = slice(1, 2, None), slice(2, None, 2), slice(4, None, 2)
+
+    shape = (70, 5, 90)
+    a1 = np.random.randn(*shape)
+    t1 = Tensor.from_numpy(a1)
+    itemsize = a1.itemsize
+
+    def np_ptr(a):
+        return a.__array_interface__["data"][0]//itemsize
+
+    a2 = a1[slices1]
+    a3 = a2[slices2]
+    a1_ptr = np_ptr(a1)
+    a2_ptr = np_ptr(a2)
+    a3_ptr = np_ptr(a3)
+
+    t2 = t1[slices1]
+    t3 = t2[slices2]
+    t1_ptr = t1.data.ptr.value//itemsize  # type: ignore
+    t2_ptr = t2.data.ptr.value//itemsize  # type: ignore
+    t3_ptr = t3.data.ptr.value//itemsize  # type: ignore
+
+    print(a3_ptr - a2_ptr, a2_ptr - a1_ptr, a3_ptr-a1_ptr)
+    print(t3_ptr - t2_ptr, t2_ptr - t1_ptr, t3_ptr-t1_ptr)
+
+    assert a3_ptr - a2_ptr == t3_ptr - t2_ptr
+    assert a2_ptr - a1_ptr == t2_ptr - t1_ptr
+    assert a3_ptr - a1_ptr == t3_ptr - t1_ptr
 
 
 def test_reduce_axis_ops():
@@ -159,7 +200,7 @@ def test_uops():
         a = (T.randn(*shape)+10).to(dtype)
         for opname, func in ops:
             print(opname)
-            check(func(a), func(from_torch(a)), contiguous=True)
+            check(func(a), func(from_torch(a)))
 
 
 def test_matmul():

@@ -3,7 +3,7 @@ import numpy as np
 from tensor import Tensor
 
 
-def check(a1: T.Tensor, a2: Tensor, rtol=1e-05, atol=1e-08, contiguous=False):
+def check(a1: T.Tensor, a2: Tensor, rtol=1e-05, atol=1e-08):
     assert isinstance(a1, T.Tensor), type(a1)
     assert isinstance(a2, Tensor), type(a2)
 
@@ -12,9 +12,9 @@ def check(a1: T.Tensor, a2: Tensor, rtol=1e-05, atol=1e-08, contiguous=False):
     a1_numpy = a1.numpy(force=True)
     a2_numpy = a2.numpy()
 
-    if contiguous:
-        a1_numpy = np.ascontiguousarray(a1_numpy)
-        a2_numpy = np.ascontiguousarray(a2_numpy)
+    # if contiguous:
+    #     a1_numpy = np.ascontiguousarray(a1_numpy)
+    #     a2_numpy = np.ascontiguousarray(a2_numpy)
 
     assert a1_numpy.shape == a2_numpy.shape, (a1_numpy.shape, a2_numpy.shape)
     assert a1_numpy.dtype == a2_numpy.dtype, (a1_numpy.dtype, a2_numpy.dtype)
@@ -29,4 +29,4 @@ def check(a1: T.Tensor, a2: Tensor, rtol=1e-05, atol=1e-08, contiguous=False):
         )
 
 
-def from_torch(a: T.Tensor): return Tensor.from_numpy(a.numpy()).cuda()
+def from_torch(a: T.Tensor): return Tensor.from_numpy(a.numpy())
