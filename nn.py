@@ -83,3 +83,9 @@ class Sequential(Module[Any]):
         assert member_path[0].isdigit()
         index = int(member_path[0])
         self.layers[index]._load_state(member_path[1:], state)
+
+
+class ReLU(Module[Tensor]):
+    def forward(self, x: Tensor) -> Tensor:
+        x[x < 0] = 0
+        return x

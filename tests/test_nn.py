@@ -9,8 +9,11 @@ class Model1(T.nn.Module):
         super().__init__()
         self.seq = T.nn.Sequential(
             T.nn.Linear(inc, 64),
+            T.nn.ReLU(),
             T.nn.Linear(64, 64),
+            T.nn.ReLU(),
             T.nn.Linear(64, 64),
+            T.nn.ReLU(),
             T.nn.Linear(64, outc),
         )
 
@@ -23,8 +26,11 @@ class Model2(nn.Module[Tensor]):
         super().__init__()
         self.seq = nn.Sequential(
             nn.Linear(inc, 64),
+            nn.ReLU(),
             nn.Linear(64, 64),
+            nn.ReLU(),
             nn.Linear(64, 64),
+            nn.ReLU(),
             nn.Linear(64, outc),
         )
 
