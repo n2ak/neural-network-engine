@@ -34,6 +34,11 @@ class Tensor:
     def shape(self): return self.data.shape
     @property
     def stride(self): return self.data.stride
+
+    @property
+    def stride_bytes(self):
+        return tuple(s * self.dtype.itemsize for s in self.data.stride)
+
     @property
     def dtype(self): return self.data.dtype
 
@@ -240,50 +245,59 @@ class Tensor:
         return CUDA_OPS.matmul(self, other)
 
     def __getitem__(self, keys):
-        shape = self.shape
-        stride = self.stride
-
-        assert isinstance(keys, tuple), type(keys)
-        assert all(map(lambda s: isinstance(s, slice), keys))
+        import math
+        if not isinstance(keys, tuple):
+            keys = (keys,)
         if len(keys) < self.ndim:
             left = self.ndim - len(keys)
             keys = tuple(list(keys) + [slice(None) for _ in range(left)])
         assert len(keys) == self.ndim
 
-        slices: np.ndarray = np.array([
-            (s.start or 0, s.stop or d, s.step or 1)
-            for d, s in zip(shape, keys)])
-        # [30:...] and the dim is lower than 30 => we clip
-        slices[:, 1] = np.clip(slices[:, 1], 0, shape)
+        new_shape: list[int] = []
+        new_stride: list[int] = []
+        offsets: list[int] = []
+        for key, dim, strd in zip(keys, self.shape, self.stride):
+            if isinstance(key, slice):
+                _slice = key
+                _slice = [_slice.start or 0,
+                          _slice.stop or dim, _slice.step or 1]
 
-        new_shape = np.ceil((slices[:, 1] - slices[:, 0]) / slices[:, 2])
-        # clip negative dimensions
-        new_shape = np.clip(new_shape, 0, shape)
+                # [30:...] and the dim is lower than 30 => we clip
+                _slice[1] = clip(_slice[1], 0, dim)
 
-        slices[:, 0] = np.clip(slices[:, 0], 0, np.array(shape))
-        # slices[:, 0] = np.where(slices[:, 0] < shape, slices[:, 0], 0)
+                new_dim = math.ceil((_slice[1] - _slice[0]) / _slice[2])
+                # clip negative dimensions
+                new_dim = clip(new_dim, 0, dim)
 
-        offsets = (slices[:, 0] * stride)
-        # strides at 0 dimensions shouldnt contribute to add offset
-        # it doesn't matter because the size is 0, just to match numpy's results
-        offsets = np.where(new_shape == 0, 0, offsets)
-        offset = offsets.sum().item()
+                _slice[0] = clip(_slice[0], 0, np.array(dim))
+                # _slice[0] = np.where(_slice[0] < shape, _slice[0], 0)
 
-        new_stride = (slices[:, 2] * stride)
-        # strides at 0 dimensions shouldnt add contribute to stride
-        # it doesn't matter because the size is 0, just to match numpy's results
-        new_stride = np.where(new_shape == 0, stride, new_stride)
+                offset = (_slice[0] * strd)
+                # strides at 0 dimensions shouldnt contribute to add offset
+                # it doesn't matter because the size is 0, just to match numpy's results
+                if new_dim == 0:
+                    offset = 0
 
-        new_shape = tuple(new_shape.astype(int).tolist())
-        new_stride = tuple(new_stride.astype(int).tolist())
+                new_strd = (_slice[2] * strd)
+                # strides at 0 dimensions shouldnt add contribute to stride
+                # it doesn't matter because the size is 0, just to match numpy's results
+                if new_dim == 0:
+                    new_strd = strd
 
-        # print(shape, "shape->", new_shape)
-        # print(stride, "stride->", new_stride)
+                offsets.append(offset)
+                new_shape.append(new_dim)
+                new_stride.append(new_strd)
+            else:
+                assert key < dim
+                offsets.append(key * strd)
 
+        # print(self.shape, "shape->", new_shape)
+        # print(self.stride, "stride->", new_stride)
+        # print("offsets", offsets)
         return self._as_view(
-            shape=new_shape,
-            stride=new_stride,
-            ptr_offset=offset,
+            shape=tuple(new_shape),
+            stride=tuple(new_stride),
+            ptr_offset=sum(offsets),
             slice=keys
         )
 
@@ -294,6 +308,10 @@ class Tensor:
             CUDA_OPS.setitem_op(self, keys, value)
         else:
             raise NotImplementedError()
+
+
+def clip(x, _min, _max):
+    return max(_min, min(x, _max))
 
 
 class CUDA_OPS:

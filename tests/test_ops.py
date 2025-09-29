@@ -88,7 +88,7 @@ def test_nested_slicing():
     for dtype in [np.float32, np.float64, np.int32, np.int64]:
         np.random.seed(0)
         T.manual_seed(0)
-        shape = (70, 5, 90)
+        shape = (70, 5, 10, 90)
         a = np.random.randn(*shape).astype(dtype)
 
         for i, slices in enumerate([
@@ -99,42 +99,52 @@ def test_nested_slicing():
         ]):
             print(i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check(a[1:, :3][slices], from_numpy(a)[
-                  1:, :3][slices])
+            check(a[1:, :3, 2][slices], from_numpy(a)[1:, :3, 2][slices])
 
 
 def test_view_offset():
 
     from tensor import Tensor
-    slices1 = slice(1, 2, None), slice(2, None, 2), slice(None, None, 4)
-    slices2 = slice(1, 2, None), slice(2, None, 2), slice(4, None, 2)
 
-    shape = (70, 5, 90)
-    a1 = np.random.randn(*shape)
-    t1 = Tensor.from_numpy(a1)
-    itemsize = a1.itemsize
+    def test(slices1, slices2):
+        shape = (70, 5, 90)
+        a1 = np.random.randn(*shape)
+        t1 = Tensor.from_numpy(a1)
+        itemsize = a1.itemsize
 
-    def np_ptr(a):
-        return a.__array_interface__["data"][0]//itemsize
+        def np_ptr(a):
+            return a.__array_interface__["data"][0]//itemsize
 
-    a2 = a1[slices1]
-    a3 = a2[slices2]
-    a1_ptr = np_ptr(a1)
-    a2_ptr = np_ptr(a2)
-    a3_ptr = np_ptr(a3)
+        a2 = a1[slices1]
+        a3 = a2[slices2]
+        a1_ptr = np_ptr(a1)
+        a2_ptr = np_ptr(a2)
+        a3_ptr = np_ptr(a3)
 
-    t2 = t1[slices1]
-    t3 = t2[slices2]
-    t1_ptr = t1.data.ptr.value//itemsize  # type: ignore
-    t2_ptr = t2.data.ptr.value//itemsize  # type: ignore
-    t3_ptr = t3.data.ptr.value//itemsize  # type: ignore
+        t2 = t1[slices1]
+        t3 = t2[slices2]
+        t1_ptr = t1.data.ptr.value//itemsize  # type: ignore
+        t2_ptr = t2.data.ptr.value//itemsize  # type: ignore
+        t3_ptr = t3.data.ptr.value//itemsize  # type: ignore
 
-    print(a3_ptr - a2_ptr, a2_ptr - a1_ptr, a3_ptr-a1_ptr)
-    print(t3_ptr - t2_ptr, t2_ptr - t1_ptr, t3_ptr-t1_ptr)
+        print(a3_ptr - a2_ptr, a2_ptr - a1_ptr, a3_ptr-a1_ptr)
+        print(t3_ptr - t2_ptr, t2_ptr - t1_ptr, t3_ptr-t1_ptr)
 
-    assert a3_ptr - a2_ptr == t3_ptr - t2_ptr
-    assert a2_ptr - a1_ptr == t2_ptr - t1_ptr
-    assert a3_ptr - a1_ptr == t3_ptr - t1_ptr
+        assert a3_ptr - a2_ptr == t3_ptr - t2_ptr
+        assert a2_ptr - a1_ptr == t2_ptr - t1_ptr
+        assert a3_ptr - a1_ptr == t3_ptr - t1_ptr
+    test(
+        (slice(1, 2, None), slice(2, None, 2), slice(None, None, 4)),
+        (slice(1, 2, None), slice(2, None, 2), slice(4, None, 2))
+    )
+    test(
+        (2, slice(2, None, 2), slice(None, None, 4)),
+        (slice(2, None, 2), slice(4, None, 2))
+    )
+    test(
+        (slice(2, None, 2), slice(4, None, 2)),
+        (2, slice(2, None, 2), slice(None, None, 4)),
+    )
 
 
 def test_reduce_axis_ops():
