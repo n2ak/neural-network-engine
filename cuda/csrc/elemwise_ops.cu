@@ -2,7 +2,11 @@ enum _EW_OP {
     _EW_ADD = 0,
     _EW_SUB = 1,
     _EW_MUL = 2,
-    _EW_DIV = 3
+    _EW_DIV = 3,
+    _EW_LT  = 4,
+    _EW_LE  = 5,
+    _EW_GT  = 6,
+    _EW_GE  = 7,
 };
 
 template<typename T>
@@ -12,6 +16,10 @@ __device__ inline T __exec_ew_op(T x, T y, _EW_OP op){
         case _EW_SUB:  return x - y;
         case _EW_MUL:  return x * y;
         case _EW_DIV:  return x / y;
+        case _EW_LT :  return x < y;
+        case _EW_LE :  return x <= y;
+        case _EW_GT :  return x > y;
+        case _EW_GE :  return x >= y;
     }
     return 0; // should never reach
 }

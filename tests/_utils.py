@@ -23,7 +23,7 @@ def check(a1: T.Tensor | np.typing.NDArray, a2: Tensor, rtol=1e-05, atol=1e-08):
 
     if not np.allclose(a1_numpy, a2_numpy, rtol=rtol, atol=atol):
         raise Exception(
-            f"mean_diff: {np.abs(a1_numpy - a2_numpy).mean()}\n"
+            f"mean_diff: {np.abs(a1_numpy.astype(float) - a2_numpy.astype(float)).mean()}\n"
             f"expected : {a1_numpy.flatten()[:10]}\n"
             f"found    : {a2_numpy.flatten()[:10]}\n"
         )

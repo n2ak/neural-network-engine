@@ -111,6 +111,18 @@ class Tensor:
     def __truediv__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("div", self, other, floating_op=True)
 
+    def __lt__(self, other: Self | int | float):
+        return CUDA_OPS.elem_op("lt", self, other, floating_op=True)
+
+    def __le__(self, other: Self | int | float):
+        return CUDA_OPS.elem_op("le", self, other, floating_op=True)
+
+    def __gt__(self, other: Self | int | float):
+        return CUDA_OPS.elem_op("gt", self, other, floating_op=True)
+
+    def __ge__(self, other: Self | int | float):
+        return CUDA_OPS.elem_op("ge", self, other, floating_op=True)
+
     def exp(self):
         return CUDA_OPS.uop("exp", self)
 
@@ -163,7 +175,7 @@ class Tensor:
         # TODO: do it in gpu
         return Tensor.from_numpy(np.ascontiguousarray(self.numpy()))
 
-    def _broadcastable(self, other: Self):
+    def _broadcastable(self, other: "Tensor"):
         for d1, d2 in zip(self.shape[::-1], other.shape[::-1]):
             if d1 == 1 or d2 == 1:
                 continue
@@ -171,7 +183,7 @@ class Tensor:
                 return False
         return True
 
-    def try_broadcast(self, other: Self):
+    def try_broadcast(self, other: "Tensor"):
         if self.shape == other.shape:
             return self, other
 
@@ -262,6 +274,14 @@ class Tensor:
             slice=keys
         )
 
+    def __setitem__(self, keys, value):
+        if isinstance(keys, Tensor):
+            if not self._broadcastable(keys):
+                raise Exception("Tensor is not broadcastable with the keys")
+            print(keys.shape)
+        else:
+            raise NotImplementedError()
+
 
 class CUDA_OPS:
     _kernels = _cuda_ops
@@ -273,7 +293,11 @@ class CUDA_OPS:
             b = Tensor.from_numpy(np.array(b, dtype=a.dtype))
             b = b.expand(*a.shape)
 
-        out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
+        if op_name in ["lt", "le", "gt", "ge"]:
+            out_dtype = np.dtype(np.bool)
+        else:
+            out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
+
         kernel = cls._kernels[elemwise_op_name(
             op_name, a.dtype, b.dtype, out_dtype)]
 

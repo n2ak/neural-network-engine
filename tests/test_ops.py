@@ -10,6 +10,10 @@ def test_elemwise_ops():
                 ("sub", lambda a, b:  a - b),
                 ("mul", lambda a, b:  a * b),
                 ("div", lambda a, b:  a / b),
+                ("lt", lambda a, b:  a < b),
+                ("le", lambda a, b:  a <= b),
+                ("gt", lambda a, b:  a > b),
+                ("ge", lambda a, b:  a >= b),
             ]
 
             shape = (3, 7, 5, 9)
@@ -29,6 +33,10 @@ def test_elemwise_ops_broadcast():
                 ("sub", lambda a, b:  a - b),
                 ("mul", lambda a, b:  a * b),
                 ("div", lambda a, b:  a / b),
+                ("lt", lambda a, b:  a < b),
+                ("le", lambda a, b:  a <= b),
+                ("gt", lambda a, b:  a > b),
+                ("ge", lambda a, b:  a >= b),
             ]
 
             a = T.randn(3, 1, 5, 9).to(dtype1)

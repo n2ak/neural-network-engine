@@ -9,6 +9,10 @@ ELEMWISE_OPS = [
     ("sub", False, "float32", "float64", "int32", "int64"),
     ("mul", False, "float32", "float64", "int32", "int64"),
     ("div", True, "float32", "float64", "int32", "int64"),
+    ("lt", False, "float32", "float64", "int32", "int64"),
+    ("le", False, "float32", "float64", "int32", "int64"),
+    ("gt", False, "float32", "float64", "int32", "int64"),
+    ("ge", False, "float32", "float64", "int32", "int64"),
 ]
 
 
@@ -30,7 +34,11 @@ def register_elemwise_ops(lib: ctypes.CDLL, ops: dict):
     for name, floating_op, *dtypes in ELEMWISE_OPS:
         for in_dtype1 in dtypes:
             for in_dtype2 in dtypes:
-                out_dtype = promote_dtype(in_dtype1, in_dtype2, floating_op)
+                if name in ["lt", "le", "gt", "ge"]:
+                    out_dtype = "bool"
+                else:
+                    out_dtype = promote_dtype(
+                        in_dtype1, in_dtype2, floating_op)
                 opname = elemwise_op_name(
                     name, in_dtype1, in_dtype2, out_dtype)
                 ops[opname] = define_elemwise_op(lib, opname)
@@ -40,7 +48,11 @@ def elemwise_code(name: str, floating_op: bool, *dtypes: str):
     op_num = f"_EW_{name.upper()}"
 
     def elem_op_code_dype(input_dtype1, input_dtype2):
-        out_dtype = promote_dtype(input_dtype1, input_dtype2, floating_op)
+        if name in ["lt", "le", "gt", "ge"]:
+            out_dtype = "bool"
+        else:
+            out_dtype = promote_dtype(input_dtype1, input_dtype2, floating_op)
+
         func_name = elemwise_op_name(
             name, input_dtype1, input_dtype2, out_dtype)
         code = f"""

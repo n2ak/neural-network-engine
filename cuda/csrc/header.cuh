@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
+#include <cstdint>
 
 #define BLOCK_SIZE 1024
 #define MAX_DIMS 4
@@ -7,6 +8,8 @@
 #define float64 double
 #define int32 int
 #define int64 long long
+#define bool int8_t
+
 #define sum(a,b) a+b
 
 #define _add(a,b) a+b
