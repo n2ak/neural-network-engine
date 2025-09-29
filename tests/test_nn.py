@@ -52,3 +52,7 @@ def test_nn_forward():
     res2 = lin2(from_torch(x))
 
     check(res1, res2)
+
+
+def test_minist():
+    from sklearn.datasets import load_digits

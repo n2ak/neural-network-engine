@@ -2,8 +2,8 @@
 #define _MAX_REDUCTION 1
 #define _SUM_REDUCTION 2
 
-template<typename T>
-__device__ inline T __reduce(T x,T y,int reduction){
+template<typename I,typename O>
+__device__ inline O __reduce(O x,I y,int reduction){
     switch(reduction){
         case _MAX_REDUCTION: return max(x,y);
         case _SUM_REDUCTION: return x + y;
@@ -79,7 +79,7 @@ __global__ void  reduction_axis_kernel(
         for (int d = 0; d < ndim_in; ++d) {
             in_off += in_coords[d] * in_strides[d];
         }
-        acc = __reduce(acc, (O)input[in_off], reduction_op);
+        acc = __reduce<O,O>(acc, input[in_off], reduction_op);
     }
 
     output[flattenIndex(ndim_out, out_coords, out_strides)] = acc;
@@ -119,7 +119,6 @@ void reduction_axis(
     const int* axis,
     int ndim_A, int ndim_C,
     int nAxis,
-    int keepdim,
     int reduction_op
 ){
     int totalSize = _size(shape_C, ndim_C);

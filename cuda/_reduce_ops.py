@@ -63,8 +63,7 @@ def reduce_axis_code(name: str, *dtypes: tuple[str, str]):
             {out_dtype}* C, const int* stride_C, const int* shape_C,
             const int* axis,
             int ndim_A, int ndim_C,
-            int nAxis,
-            int keepdim
+            int nAxis
         ) {{
             reduction_axis(
                 A, stride_A,shape_A,
@@ -72,7 +71,6 @@ def reduce_axis_code(name: str, *dtypes: tuple[str, str]):
                 axis,
                 ndim_A, ndim_C,
                 nAxis,
-                keepdim,
                 {reduction}
             );
         }}

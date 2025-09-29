@@ -149,6 +149,9 @@ class Tensor:
         axis = as_tuple(axis)
         if axis == ():
             axis = tuple(range(self.ndim))
+        for x in axis:
+            assert -self.ndim-1 < x < self.ndim
+        axis = tuple((self.ndim+x) % self.ndim for x in axis)
         return axis
 
     @property
@@ -395,7 +398,6 @@ class CUDA_OPS:
             a.ndim,
             c.ndim,
             len(axis),
-            keepdim,
         )
         return c.view(*get_shape(list(a.shape), keepdim=keepdim))
 

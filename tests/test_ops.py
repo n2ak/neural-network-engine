@@ -1,3 +1,4 @@
+import numpy as np
 import torch as T
 from _utils import check, from_torch, from_numpy
 
@@ -65,7 +66,7 @@ def test_bin_ops():
 
 
 def test_slicing():
-    import numpy as np
+
     for dtype in [np.float32, np.float64, np.int32, np.int64]:
         np.random.seed(0)
         shape = (70, 5, 90)
@@ -83,7 +84,7 @@ def test_slicing():
 
 
 def test_nested_slicing():
-    import numpy as np
+
     for dtype in [np.float32, np.float64, np.int32, np.int64]:
         np.random.seed(0)
         T.manual_seed(0)
@@ -103,7 +104,7 @@ def test_nested_slicing():
 
 
 def test_view_offset():
-    import numpy as np
+
     from tensor import Tensor
     slices1 = slice(1, 2, None), slice(2, None, 2), slice(None, None, 4)
     slices2 = slice(1, 2, None), slice(2, None, 2), slice(4, None, 2)
@@ -153,9 +154,10 @@ def test_reduce_axis_ops():
             mean_axis = 1, 2
             max_axis = 2  # torch only accpets one axis for max
             sum_axis = 1, 2, 3
-            a = (T.randn(*shape) + 10).to(dtype)
+            T.manual_seed(1)
+            a = T.rand(shape).to(dtype)
             for opname, func in ops:
-                print(dtype, opname, keepdim)
+                print(f"{dtype=}, {opname=}, {keepdim=}")
                 check(func(a), func(from_torch(a)))
 
 

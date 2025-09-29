@@ -10,13 +10,6 @@
 #define int64 long long
 #define bool int8_t
 
-#define sum(a,b) a+b
-
-#define _add(a,b) a+b
-#define _mul(a,b) a*b
-#define _sub(a,b) a-b
-#define _div(a,b) a/b
-
 __device__ inline void unravel_index(int idx, const int* shape, int ndim, int* coords) {
     for (int d = ndim - 1; d >= 0; --d) {
         coords[d] = idx % shape[d];
