@@ -4,7 +4,7 @@ from typing import Self
 from cuda import _cuda_ops
 from cuda.alloc import CudaAllocator, Buffer
 from cuda.utils import promote_dtype, promote_uop_dtype
-from cuda.op_names import elemwise_op_name, uop_name, reduceop_name, reduction_op_name
+from cuda.op_names import *
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -274,11 +274,11 @@ class Tensor:
             slice=keys
         )
 
-    def __setitem__(self, keys, value):
+    def __setitem__(self, keys, value: Self | int | float | bool):
         if isinstance(keys, Tensor):
             if not self._broadcastable(keys):
                 raise Exception("Tensor is not broadcastable with the keys")
-            print(keys.shape)
+            CUDA_OPS.setitem_op(self, keys, value)
         else:
             raise NotImplementedError()
 
@@ -461,3 +461,30 @@ class CUDA_OPS:
             dst.ndim,
         )
         return dst
+
+    @classmethod
+    def setitem_op(cls, t: Tensor, condition: Tensor, value: Tensor | int | float | bool):
+        if not isinstance(value, Tensor):
+            value = Tensor.from_numpy(np.array(value, dtype=t.dtype))
+            value = value.expand(*condition.shape)
+
+        assert condition.shape == value.shape
+        assert t.dtype == value.dtype
+        assert t._broadcastable(condition)
+        assert condition.is_contiguous
+        assert value.shape == t.shape
+
+        kernel_name = setitem_op_name(t.dtype)
+        kernel = cls._kernels[kernel_name]
+
+        value_stride = np.array(value.stride, dtype=np.int32)
+
+        t_shape = np.array(t.shape, dtype=np.int32)
+        t_stride = np.array(t.stride, dtype=np.int32)
+
+        kernel(
+            value.data.ptr, value_stride,  # type: ignore
+            condition.data.ptr,   # type: ignore
+            t.data.ptr, t_shape, t_stride,
+            t.ndim
+        )

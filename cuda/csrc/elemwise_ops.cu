@@ -9,17 +9,17 @@ enum _EW_OP {
     _EW_GE  = 7,
 };
 
-template<typename T>
-__device__ inline T __exec_ew_op(T x, T y, _EW_OP op){
+template<typename I1,typename I2,typename O>
+__device__ inline O __exec_ew_op(I1 x, I2 y, _EW_OP op){
     switch(op){
-        case _EW_ADD:  return x + y;
-        case _EW_SUB:  return x - y;
-        case _EW_MUL:  return x * y;
-        case _EW_DIV:  return x / y;
-        case _EW_LT :  return x < y;
-        case _EW_LE :  return x <= y;
-        case _EW_GT :  return x > y;
-        case _EW_GE :  return x >= y;
+        case _EW_ADD:  return (O)x + (O)y;
+        case _EW_SUB:  return (O)x - (O)y;
+        case _EW_MUL:  return (O)x * (O)y;
+        case _EW_DIV:  return (O)x / (O)y;
+        case _EW_LT :  return (bool)(x < y);
+        case _EW_LE :  return (bool)(x <= y);
+        case _EW_GT :  return (bool)(x > y);
+        case _EW_GE :  return (bool)(x >= y);
     }
     return 0; // should never reach
 }
@@ -45,7 +45,7 @@ __global__ void element_wise_kernel(
     int flat_C = flattenIndex(ndim, coords, stride_C);
 
 
-    C[flat_C] = __exec_ew_op((O) A[flat_A] ,(O) B[flat_B], op);
+    C[flat_C] = __exec_ew_op<I1,I2,O>(A[flat_A], B[flat_B], op);
 }}
 
 template<typename I1,typename I2,typename O>

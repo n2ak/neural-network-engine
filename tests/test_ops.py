@@ -17,7 +17,7 @@ def test_elemwise_ops():
             ]
 
             shape = (3, 7, 5, 9)
-            a = T.randn(*shape).to(dtype1)
+            a = T.randn(*shape).to(dtype1)+10
             b = T.randn(*shape).to(dtype2)+10
 
             for name, func in funcs:
@@ -39,7 +39,7 @@ def test_elemwise_ops_broadcast():
                 ("ge", lambda a, b:  a >= b),
             ]
 
-            a = T.randn(3, 1, 5, 9).to(dtype1)
+            a = T.randn(3, 1, 5, 9).to(dtype1)+10
             b = T.randn(7, 1, 9).to(dtype2)+10
 
             for name, func in funcs:
@@ -238,3 +238,13 @@ def test_complex():
             return (((a*b)+10) / 12.0).mean()
 
         check(func(a, b), func(from_torch(a), from_torch(b)))
+
+
+def test_other_ops():
+    def relu(a):
+        a[a < 0] = 0
+        return a
+    for func in [relu]:
+        T.manual_seed(0)
+        a = T.randn(3, 5, 7)
+        check(func(a), func(from_torch(a)))
