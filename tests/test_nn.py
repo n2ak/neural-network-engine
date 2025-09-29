@@ -1,3 +1,4 @@
+import numpy as np
 import nn
 import torch as T
 from tensor import Tensor
@@ -55,4 +56,26 @@ def test_nn_forward():
 
 
 def test_minist():
+    class Model(nn.Module[Tensor]):
+        def __init__(self, inc, outc) -> None:
+            super().__init__()
+            self.seq = nn.Sequential(
+                nn.Linear(inc, 64),
+                nn.ReLU(),
+                nn.Linear(64, 64),
+                nn.ReLU(),
+                nn.Linear(64, 64),
+                nn.ReLU(),
+                nn.Linear(64, outc),
+            )
+
+        def forward(self, x):
+            return self.seq(x)
     from sklearn.datasets import load_digits
+    from sklearn.datasets import load_digits
+    X, y = load_digits(return_X_y=True)
+    X = Tensor.from_numpy(X.astype(np.float32))
+    y = Tensor.from_numpy(y.astype(np.int32))
+    model = Model(X.shape[1], 10)
+    logits = model.forward(X)
+    nn.cross_entropy(logits, y).numpy()
