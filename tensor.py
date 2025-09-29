@@ -225,8 +225,9 @@ class Tensor:
             keys = tuple(list(keys) + [slice(None) for _ in range(left)])
         assert len(keys) == self.ndim
 
-        slices: np.ndarray = np.array([(s.start or 0, s.stop or d, s.step or 1)
-                                      for d, s in zip(shape, keys)])
+        slices: np.ndarray = np.array([
+            (s.start or 0, s.stop or d, s.step or 1)
+            for d, s in zip(shape, keys)])
         # [30:...] and the dim is lower than 30 => we clip
         slices[:, 1] = np.clip(slices[:, 1], 0, shape)
 
@@ -239,11 +240,13 @@ class Tensor:
 
         offsets = (slices[:, 0] * stride)
         # strides at 0 dimensions shouldnt contribute to add offset
+        # it doesn't matter because the size is 0, just to match numpy's results
         offsets = np.where(new_shape == 0, 0, offsets)
         offset = offsets.sum().item()
 
         new_stride = (slices[:, 2] * stride)
         # strides at 0 dimensions shouldnt add contribute to stride
+        # it doesn't matter because the size is 0, just to match numpy's results
         new_stride = np.where(new_shape == 0, stride, new_stride)
 
         new_shape = tuple(new_shape.astype(int).tolist())
