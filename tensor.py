@@ -3,7 +3,7 @@ import numpy as np
 from typing import Self
 from cuda import _cuda_ops
 from cuda.alloc import CudaAllocator, Buffer
-from cuda.utils import promote_dtype, promote_uop_dtype
+from cuda.utils import promote_dtype, promote_uop_dtype, assert_cuda_error
 from cuda.op_names import *
 
 
@@ -253,6 +253,19 @@ class Tensor:
             keys = tuple(list(keys) + [slice(None) for _ in range(left)])
         assert len(keys) == self.ndim
 
+        if any(map(lambda k: isinstance(k, list), keys)):
+            # we need to copy
+            def to_list(i, k):
+                if isinstance(k, (list, tuple)):
+                    return np.array(k)
+                elif isinstance(k, int):
+                    return np.array([k])
+                elif isinstance(k, slice):
+                    return np.arange(k.start or 0, k.stop or self.shape[i], k.step or 1)
+                assert False, type(k)
+            keys = [to_list(i, k) for i, k in enumerate(keys)]
+            return CUDA_OPS.copy_out_indices(self, keys)
+
         new_shape: list[int] = []
         new_stride: list[int] = []
         offsets: list[int] = []
@@ -287,10 +300,11 @@ class Tensor:
                 offsets.append(offset)
                 new_shape.append(new_dim)
                 new_stride.append(new_strd)
-            else:
+            elif isinstance(key, int):
                 assert key < dim
                 offsets.append(key * strd)
-
+            else:
+                assert False, type(key)
         # print(self.shape, "shape->", new_shape)
         # print(self.stride, "stride->", new_stride)
         # print("offsets", offsets)
@@ -473,6 +487,44 @@ class CUDA_OPS:
             src.ndim,
             dst.ndim,
         )
+        return dst
+
+    @classmethod
+    def copy_out_indices(cls, src: Tensor, indices: list[np.typing.NDArray]):
+        assert False
+        # TODO: maybe we need offset ?
+        dst_shape = tuple(len(i) if i.ndim != 0 else 1 for i in indices)
+        kernel_name = f"copy_out_indices_{src.dtype}"
+        kernel = cls._kernels[kernel_name]
+
+        dst = Tensor.empty(dst_shape, dtype=src.dtype)
+
+        src_shape = np.array(src.shape, dtype=np.int32)
+        src_stride = np.array(src.stride, dtype=np.int32)
+
+        dst_shape = np.array(dst.shape, dtype=np.int32)
+
+        # indices_arr = np.array([
+        #     Tensor.from_numpy(arr.astype(np.float32)).data.ptr.value
+        #     for arr in indices
+        # ], dtype=np.float64)
+        import ctypes
+        IndexArrayType = ctypes.c_void_p * src.ndim
+
+        indices_arr = IndexArrayType(*[
+            ctypes.c_void_p(Tensor.from_numpy(
+                arr.astype(np.int32)).data.ptr.value)
+            for arr in indices
+        ])
+
+        indices_ptr = ctypes.cast(indices_arr, ctypes.POINTER(ctypes.c_void_p))
+
+        kernel(
+            src.data.ptr, src_shape, src_stride,  # type: ignore
+            dst.data.ptr, indices_ptr, dst_shape,  # type: ignore
+            src.ndim,
+        )
+        CudaAllocator.synchronize()
         return dst
 
     @classmethod
