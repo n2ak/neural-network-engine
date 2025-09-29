@@ -1,6 +1,6 @@
 import numpy as np
 import torch as T
-from _utils import check, from_torch, from_numpy
+from _test_utils import check, from_torch, from_numpy
 
 
 def test_elemwise_ops():

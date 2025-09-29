@@ -1,8 +1,10 @@
 import numpy as np
 import nn
 import torch as T
+
 from tensor import Tensor
-from _utils import check, from_torch
+from utils import dataloader
+from _test_utils import check, from_torch
 
 
 class Model1(T.nn.Module):
@@ -71,11 +73,16 @@ def test_minist():
 
         def forward(self, x):
             return self.seq(x)
+
     from sklearn.datasets import load_digits
-    from sklearn.datasets import load_digits
+
     X, y = load_digits(return_X_y=True)
-    X = Tensor.from_numpy(X.astype(np.float32))
-    y = Tensor.from_numpy(y.astype(np.int32))
+    X, y = X.astype(np.float32), y.astype(np.int32)  # type: ignore
+
     model = Model(X.shape[1], 10)
-    logits = model.forward(X)
-    nn.cross_entropy(logits, y).numpy()
+    for batch_X, batch_y in dataloader(X, y):
+        batch_X = Tensor.from_numpy(batch_X)
+        batch_y = Tensor.from_numpy(batch_y)
+
+        logits = model.forward(batch_X)
+        loss = nn.cross_entropy(logits, batch_y)
