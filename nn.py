@@ -92,27 +92,21 @@ class ReLU(Module[Tensor]):
         return x
 
 
-def cross_entropy(input: Tensor, target: Tensor, dim=-1, reduction="mean"):
+def cross_entropy(input: Tensor, target: Tensor, dim=-1):
     assert input.ndim == 2
     assert target.ndim == 1
     assert input.shape[0] == target.shape[0]
     x = log_softmax(input, dim)
-    x = negative_log_likelihood(x.numpy(), target.numpy(), reduction=reduction)
+    x = negative_log_likelihood(x.numpy(), target.numpy())
     return x
 
 
-def negative_log_likelihood(input: np.ndarray, target: np.ndarray, reduction="mean"):
+def negative_log_likelihood(input: np.ndarray, target: np.ndarray):
     assert np.all(input <= 0), input <= 0
     indices = target.astype(int)
-    res = input[list(range(indices.size)), indices] * -1
-
-    if reduction == "mean":
-        res = res.mean()
-    elif reduction == "sum":
-        res = res.sum()
-    elif reduction == "none":
-        pass
-    return Tensor.from_numpy(np.array(res))
+    assert input.shape[0] == target.shape[0], "Input and target should have same batch size."
+    res = input[:, indices] * -1
+    return Tensor.from_numpy(np.array(res.mean()))
 
 
 def log_softmax(x: Tensor, dim=-1) -> Tensor:
