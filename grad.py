@@ -178,7 +178,10 @@ def sum_backward(x: Tensor, res: Tensor, axis: tuple[int, ...], keepdim: bool) -
             for i in axis:
                 gradient_shape.insert(i, 1)
             gradient = gradient.view(*gradient_shape)
-        for i in axis:
-            gradient_shape[i] = x.shape[i]
+        if len(axis):
+            for i in axis:
+                gradient_shape[i] = x.shape[i]
+        else:
+            gradient_shape = x.shape
         return gradient.expand(*gradient_shape),
     return backward

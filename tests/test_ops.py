@@ -167,10 +167,10 @@ def test_reduce_axis_ops():
                 torch_dtype = T.float64
             ops = [
                 ("sum", lambda x: x.sum(sum_axis, keepdim=keepdim), True),
-                # ("max", lambda x: x.max(max_axis, keepdim=keepdim).values
-                #     if isinstance(x, T.Tensor) else x.max(max_axis, keepdim=keepdim), False),
-                # ("mean", lambda x: x.mean(mean_axis, dtype=torch_dtype, keepdim=keepdim)
-                #     if isinstance(x, T.Tensor) else x.mean(mean_axis, keepdim=keepdim), True),
+                ("max", lambda x: x.max(max_axis, keepdim=keepdim).values
+                    if isinstance(x, T.Tensor) else x.max(max_axis, keepdim=keepdim), False),
+                ("mean", lambda x: x.mean(mean_axis, dtype=torch_dtype, keepdim=keepdim)
+                    if isinstance(x, T.Tensor) else x.mean(mean_axis, keepdim=keepdim), True),
             ]
             shape = (3, 5, 7, 9)
             mean_axis = 1, 2
@@ -189,16 +189,16 @@ def test_reduce_ops():
         if dtype == T.float64:
             torch_dtype = T.float64
         ops = [
-            ("sum", lambda x: x.sum()),
-            ("max", lambda x: x.max()),
+            ("sum", lambda x: x.sum(), True),
+            ("max", lambda x: x.max(), False),
             ("mean", lambda x: x.mean(dtype=torch_dtype)
-                if isinstance(x, T.Tensor) else x.mean()),
+                if isinstance(x, T.Tensor) else x.mean(), True),
         ]
         shape = (3, 5, 7, 9)
-        for opname, func in ops:
+        for opname, func, check_grad in ops:
             a = (T.randn(*shape) - 100).to(dtype)
-            print("** Test", dtype, opname)
-            check(func, (a,))
+            print("** Test", dtype, opname, check_grad)
+            check(func, (a,), check_grad=check_grad)
 
 
 def test_reduce_ops_no_axis():
