@@ -228,6 +228,18 @@ class Tensor:
     def view(self, *dims: int):
         if self.shape == dims:
             return self
+        dims_l = list(dims)
+        m_one = list(filter(lambda x: x == -1, dims))
+        match len(m_one):
+            case 0: pass
+            case 1:
+                index = dims_l.index(-1)
+                dims_l.pop(index)
+                dims_l.insert(
+                    index, (self.size // np.prod(dims_l)).astype(int).item())
+                dims = tuple(dims_l)
+            case _:
+                raise Exception("Only one dimention can have -1")
         assert np.prod(dims) == self.size
         assert self.is_contiguous
         return self._as_view(

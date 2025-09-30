@@ -225,7 +225,10 @@ def test_uops():
 def test_views():
     for dtype in [T.float32, T.float64, T.int32, T.int64]:
         ops = [
-            ("view", lambda x: x.view(*view_shape)),
+            ("view1", lambda x: x.view(-1)),
+            ("view4", lambda x: x.view(1, -1, 1)),
+            ("view2", lambda x: x.view(*view_shape)),
+            ("view3", lambda x: x.view(*view_shape2)),
             ("expand", lambda x: x.expand(*expand_shape)),
             ("transpose", lambda x: x.transpose(*T_shape)),
             ("permute", lambda x: x.permute(*permute_shape)),
@@ -235,8 +238,10 @@ def test_views():
         permute_shape = (1, 2, 0)
         expand_shape = 2, 3, 3, 5, 7
         view_shape = 5, 7, 3
+        view_shape2 = 5, -1
         a = (T.randn(*shape)+10).to(dtype)
         for opname, func in ops:
+            func(from_torch(a))
             print(opname)
             check(func(a), func(from_torch(a)))
 
