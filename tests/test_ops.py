@@ -25,7 +25,7 @@ def test_elemwise_ops():
                 a = T.randn(*shape).to(dtype1)+10
                 b = T.randn(*shape).to(dtype2)+10
 
-                print("*"*10, name, a.dtype, b.dtype, check_grad)
+                print("** Test", name, a.dtype, b.dtype, check_grad)
                 check(func, (a, b), check_grad=check_grad)
 
 
@@ -50,7 +50,7 @@ def test_elemwise_ops_broadcast():
                 check_grad = check_grad and (
                     dtype1.is_floating_point or dtype2.is_floating_point)
 
-                print("*"*10, name, a.dtype, b.dtype, check_grad)
+                print("** Test", name, a.dtype, b.dtype, check_grad)
 
                 check(func, (a, b), check_grad=check_grad)
 
@@ -71,7 +71,7 @@ def test_bin_ops():
             a = T.randn(*shape).to(dtype)
             b = 3
 
-            print("*"*10, name, dtype, check_grad)
+            print("** Test", name, dtype, check_grad)
             check(func, (a, b), check_grad=check_grad)
 
 
@@ -80,8 +80,6 @@ def test_slicing():
     for dtype in [np.float32, np.float64, np.int32, np.int64]:
         np.random.seed(0)
         shape = (70, 5, 90)
-        a1 = np.random.randn(*shape).astype(dtype)
-        a2 = from_numpy(a1)
 
         for i, slices in enumerate([
             (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
@@ -89,7 +87,9 @@ def test_slicing():
             (slice(None, None, 3), slice(0, 10, None), slice(None, None, 4)),
             (slice(100, 3, None), slice(100, None, 2), slice(4, None, 2))
         ]):
-            print(i+1, dtype)
+            a1 = np.random.randn(*shape).astype(dtype)
+            a2 = from_numpy(a1)
+            print("** Test", i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
             check_result(a1[slices], a2[slices].numpy())
 
@@ -100,8 +100,6 @@ def test_nested_slicing():
         np.random.seed(0)
         T.manual_seed(0)
         shape = (70, 5, 10, 90)
-        a1 = np.random.randn(*shape).astype(dtype)
-        a2 = from_numpy(a1)
 
         for i, slices in enumerate([
             (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
@@ -109,7 +107,9 @@ def test_nested_slicing():
             (slice(None, None, 3), slice(0, 10, None), slice(None, None, 4)),
             (slice(100, 3, None), slice(100, None, 2), slice(4, None, 2))
         ]):
-            print(i+1, dtype)
+            a1 = np.random.randn(*shape).astype(dtype)
+            a2 = from_numpy(a1)
+            print("** Test", i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
             check_result(a1[1:, :3, 2][slices], a2[1:, :3, 2][slices].numpy())
 
@@ -177,9 +177,9 @@ def test_reduce_axis_ops():
             max_axis = 2  # torch only accpets one axis for max
             sum_axis = 1, 2, 3
             T.manual_seed(1)
-            a = T.rand(shape).to(dtype)
             for opname, func in ops:
-                print(f"{dtype=}, {opname=}, {keepdim=}")
+                a = T.rand(shape).to(dtype)
+                print("** Test", f"{dtype=}, {opname=}, {keepdim=}")
                 check(func, (a,))
 
 
@@ -195,9 +195,9 @@ def test_reduce_ops():
                 if isinstance(x, T.Tensor) else x.mean()),
         ]
         shape = (3, 5, 7, 9)
-        a = (T.randn(*shape) - 100).to(dtype)
         for opname, func in ops:
-            print(dtype, opname)
+            a = (T.randn(*shape) - 100).to(dtype)
+            print("** Test", dtype, opname)
             check(func, (a,))
 
 
@@ -214,24 +214,24 @@ def test_reduce_ops_no_axis():
                 if isinstance(x, T.Tensor) else x.mean()),
         ]
         shape = (3, 5, 7, 9)
-        a = (T.randn(*shape) + 10).to(dtype)
         for opname, func in ops:
-            print(dtype, opname)
+            a = (T.randn(*shape) + 10).to(dtype)
+            print("** Test", dtype, opname)
             check(func, (a,))
 
 
 def test_uops():
     for dtype in [T.float32, T.float64, T.int32, T.int64]:
         ops = [
-            ("exp", lambda x: x.exp()),
-            ("log", lambda x: x.log()),
-            ("log2", lambda x: x.log2()),
+            ("exp", lambda x: x.exp(), True),
+            ("log", lambda x: x.log(), True),
+            ("log2", lambda x: x.log2(), True),
         ]
         shape = (3, 5, 7)
-        a = (T.randn(*shape)+10).to(dtype)
-        for opname, func in ops:
-            print(opname)
-            check(func, (a,))
+        for opname, func, check_grad in ops:
+            a = (T.rand(*shape)+1).to(dtype)
+            print("** Test", opname, check_grad, dtype)
+            check(func, (a,), check_grad=check_grad)
 
 
 def test_views():
@@ -251,10 +251,10 @@ def test_views():
         expand_shape = 2, 3, 3, 5, 7
         view_shape = 5, 7, 3
         view_shape2 = 5, -1
-        a = (T.randn(*shape)+10).to(dtype)
         for opname, func in ops:
+            a = (T.randn(*shape)+10).to(dtype)
             func(from_torch(a))
-            print(opname)
+            print("** Test", opname)
             check(func, (a,))
 
 

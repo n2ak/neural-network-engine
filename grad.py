@@ -152,5 +152,14 @@ def exp_backward(x: Tensor, res: Tensor) -> UnaryOpBackwardFn:
 
 def log_backward(x: Tensor, res: Tensor) -> UnaryOpBackwardFn:
     def backward(gradient: Tensor):
-        return 1/x * gradient,
+        return gradient/x,
     return backward
+
+
+def log2_backward(x: Tensor, res: Tensor) -> UnaryOpBackwardFn:
+    def backward(gradient: Tensor):
+        return gradient/(x * ln2),
+    return backward
+
+
+ln2 = np.log(2).item()

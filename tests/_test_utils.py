@@ -20,6 +20,8 @@ def check(
     if check_grad:
         inputs_torch = tuple(i.requires_grad_(i.dtype.is_floating_point) if isinstance(
             i, torch.Tensor) else i for i in inputs_torch)
+        check_grad = any(map(lambda t: t.requires_grad if isinstance(
+            t, torch.Tensor) else False, inputs_torch))
 
     inputs_tensors = tuple(from_torch(i) if isinstance(
         i, torch.Tensor) else i for i in inputs_torch)

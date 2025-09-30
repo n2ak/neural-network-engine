@@ -56,9 +56,10 @@ class Tensor:
         return expected_stride == stride
 
     @staticmethod
-    def from_numpy(data: np.typing.NDArray):
+    def from_numpy(data: np.typing.NDArray | int | float):
+        if isinstance(data, (int, float)):
+            data = np.array(data)
         assert isinstance(data, np.ndarray), type(data)
-
         return Tensor(
             CudaAllocator.to_cuda(data),
         )
@@ -161,8 +162,9 @@ class Tensor:
     def log(self):
         return CUDA_OPS.uop("log", self, backward_fn=grad_ops.log_backward)
 
+    @differentiable_function(1)
     def log2(self):
-        return CUDA_OPS.uop("log2", self)
+        return CUDA_OPS.uop("log2", self, backward_fn=grad_ops.log2_backward)
 
     def max(self, axis: int | tuple[int, ...] = (), keepdim=False):
         return CUDA_OPS.reduce_op("max", self,  axis=axis, keepdim=keepdim)
@@ -395,7 +397,7 @@ class Tensor:
         assert self.shape == grad.shape, (self.shape, grad.shape)
 
         if (fn := getattr(self, "_backward", None)) is not None:
-            assert isinstance(fn, DifferentiableFunction), type(fn)
+            # assert isinstance(fn, DifferentiableFunction), type(fn)
             fn.backward(grad)
         else:
             self.grad = grad
