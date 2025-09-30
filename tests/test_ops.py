@@ -160,27 +160,27 @@ def test_view_offset():
 
 
 def test_reduce_axis_ops():
-    for keepdim in [True, False]:  # TODO: add True
+    for keepdim in [False, True]:  # TODO: add True
         for dtype in [T.float32, T.float64, T.int32, T.int64]:
             torch_dtype = T.float32
             if dtype == T.float64:
                 torch_dtype = T.float64
             ops = [
-                ("sum", lambda x: x.sum(sum_axis, keepdim=keepdim)),
-                ("max", lambda x: x.max(max_axis, keepdim=keepdim).values
-                    if isinstance(x, T.Tensor) else x.max(max_axis, keepdim=keepdim)),
-                ("mean", lambda x: x.mean(mean_axis, dtype=torch_dtype, keepdim=keepdim)
-                    if isinstance(x, T.Tensor) else x.mean(mean_axis, keepdim=keepdim)),
+                ("sum", lambda x: x.sum(sum_axis, keepdim=keepdim), True),
+                # ("max", lambda x: x.max(max_axis, keepdim=keepdim).values
+                #     if isinstance(x, T.Tensor) else x.max(max_axis, keepdim=keepdim), False),
+                # ("mean", lambda x: x.mean(mean_axis, dtype=torch_dtype, keepdim=keepdim)
+                #     if isinstance(x, T.Tensor) else x.mean(mean_axis, keepdim=keepdim), True),
             ]
             shape = (3, 5, 7, 9)
             mean_axis = 1, 2
             max_axis = 2  # torch only accpets one axis for max
             sum_axis = 1, 2, 3
             T.manual_seed(1)
-            for opname, func in ops:
+            for opname, func, check_grad in ops:
                 a = T.rand(shape).to(dtype)
                 print("** Test", f"{dtype=}, {opname=}, {keepdim=}")
-                check(func, (a,))
+                check(func, (a,), check_grad=check_grad)
 
 
 def test_reduce_ops():

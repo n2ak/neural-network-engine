@@ -11,10 +11,14 @@ if TYPE_CHECKING:
 
     UnaryOpBackwardFn = Callable[[Tensor], tuple[Tensor]]
     ElemWiseBackwardFn = Callable[[Tensor], tuple[Tensor, Tensor]]
+    ReduceOpBackwardFn = Callable[[Tensor], tuple[Tensor]]
 
     UnaryOpBackwardFnWrapper = Callable[[Tensor, Tensor], UnaryOpBackwardFn]
     ElemWiseBackwardFnWrapper = Callable[[
         Tensor, Tensor, Tensor], ElemWiseBackwardFn]
+
+    ReduceOpBackwardFnWrapper = Callable[[
+        Tensor, Tensor, tuple[int, ...], bool], ReduceOpBackwardFn]
 
 
 class Grad:
@@ -163,3 +167,18 @@ def log2_backward(x: Tensor, res: Tensor) -> UnaryOpBackwardFn:
 
 
 ln2 = np.log(2).item()
+
+
+def sum_backward(x: Tensor, res: Tensor, axis: tuple[int, ...], keepdim: bool) -> ReduceOpBackwardFn:
+    axis = tuple(sorted(list(axis)))  # for insert
+
+    def backward(gradient: Tensor):
+        gradient_shape = list(gradient.shape)
+        if not keepdim:
+            for i in axis:
+                gradient_shape.insert(i, 1)
+            gradient = gradient.view(*gradient_shape)
+        for i in axis:
+            gradient_shape[i] = x.shape[i]
+        return gradient.expand(*gradient_shape),
+    return backward

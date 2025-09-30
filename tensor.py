@@ -9,7 +9,7 @@ from cuda.op_names import *
 import grad as grad_ops
 from grad import differentiable_function, DifferentiableFunction, broadcastable
 if TYPE_CHECKING:
-    from grad import ElemWiseBackwardFn, ElemWiseBackwardFnWrapper, UnaryOpBackwardFnWrapper, UnaryOpBackwardFn
+    from grad import ElemWiseBackwardFn, ElemWiseBackwardFnWrapper, UnaryOpBackwardFnWrapper, UnaryOpBackwardFn, ReduceOpBackwardFnWrapper, ReduceOpBackwardFn
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -169,11 +169,12 @@ class Tensor:
     def max(self, axis: int | tuple[int, ...] = (), keepdim=False):
         return CUDA_OPS.reduce_op("max", self,  axis=axis, keepdim=keepdim)
 
+    @differentiable_function(1)
     def sum(self, axis: int | tuple[int, ...] = (), keepdim=False):
         out_dtype = self.dtype
         if self.dtype == np.int32:
             out_dtype = np.dtype(np.int64)
-        return CUDA_OPS.reduce_op("sum", self, axis=axis, keepdim=keepdim, out_dtype=out_dtype)
+        return CUDA_OPS.reduce_op("sum", self, axis=axis, keepdim=keepdim, out_dtype=out_dtype, backward_fn=grad_ops.sum_backward)
 
     def mean(self, axis: int | tuple[int, ...] = (), keepdim=False):
         d = np.prod([self.shape[a] for a in self._correct_axis(axis)]).item()
@@ -536,7 +537,25 @@ class CUDA_OPS:
         return c
 
     @classmethod
-    def reduce_op(cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool, out_dtype=None):
+    @overload
+    def reduce_op(
+        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool,
+        out_dtype=None,
+    ) -> Tensor: ...
+
+    @classmethod
+    @overload
+    def reduce_op(
+        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool,
+        backward_fn: ReduceOpBackwardFnWrapper,
+        out_dtype=None,
+    ) -> tuple[Tensor, ReduceOpBackwardFn]: ...
+
+    @classmethod
+    def reduce_op(
+        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool, out_dtype=None,
+        backward_fn: Optional[ReduceOpBackwardFnWrapper] = None,
+    ):
         if out_dtype is None:
             out_dtype = a.dtype
 
@@ -550,6 +569,8 @@ class CUDA_OPS:
                 out.data.ptr,  # type: ignore
                 a.size
             )
+            if backward_fn is not None:
+                return out, backward_fn(a, out, (), keepdim)
             return out
         axis = a._correct_axis(axis)
 
@@ -583,7 +604,10 @@ class CUDA_OPS:
             c.ndim,
             len(axis),
         )
-        return c.view(*get_shape(list(a.shape), keepdim=keepdim))
+        c = c.view(*get_shape(list(a.shape), keepdim=keepdim))
+        if backward_fn is not None:
+            return c, backward_fn(a, c, axis, keepdim)
+        return c
 
     @classmethod
     def matmul(cls, a: Tensor, b: Tensor):

@@ -82,8 +82,12 @@ class Buffer:
             assert self.parent is not None
             if self._slice is not None:
                 return self.parent.numpy()[self._slice]
+            parent = self.parent
+            while parent.parent is not None:
+                # get the orginal buffer who is not a view
+                parent = parent.parent
             data = CudaAllocator.from_cuda(
-                self.parent, new_shape=self.shape, new_stride=self.stride)
+                parent, new_shape=self.shape, new_stride=self.stride)
         else:
             data = CudaAllocator.from_cuda(self)
         assert isinstance(data, np.ndarray)
