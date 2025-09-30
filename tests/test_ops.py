@@ -1,51 +1,58 @@
 import numpy as np
 import torch as T
-from _test_utils import check, from_torch, from_numpy
+from _test_utils import check, from_torch, from_numpy, check_result
 
 
 def test_elemwise_ops():
     for dtype1 in [T.float32, T.float64, T.int32, T.int64]:
         for dtype2 in [T.float32, T.float64, T.int32, T.int64]:
             funcs = [
-                ("add", lambda a, b:  a + b),
-                ("sub", lambda a, b:  a - b),
-                ("mul", lambda a, b:  a * b),
-                ("div", lambda a, b:  a / b),
-                ("lt", lambda a, b:  a < b),
-                ("le", lambda a, b:  a <= b),
-                ("gt", lambda a, b:  a > b),
-                ("ge", lambda a, b:  a >= b),
+                ("add", lambda a, b:  a + b, True),
+                ("sub", lambda a, b:  a - b, True),
+                ("mul", lambda a, b:  a * b, True),
+                ("div", lambda a, b:  a / b, True),
+                ("lt", lambda a, b:  a < b, False),
+                ("le", lambda a, b:  a <= b, False),
+                ("gt", lambda a, b:  a > b, False),
+                ("ge", lambda a, b:  a >= b, False),
             ]
 
             shape = (3, 7, 5, 9)
-            a = T.randn(*shape).to(dtype1)+10
-            b = T.randn(*shape).to(dtype2)+10
+            for name, func, check_grad in funcs:
+                check_grad = check_grad and (
+                    dtype1.is_floating_point or dtype2.is_floating_point)
 
-            for name, func in funcs:
-                print(name, a.dtype, b.dtype)
-                check(func(a, b), func(from_torch(a), from_torch(b)))
+                a = T.randn(*shape).to(dtype1)+10
+                b = T.randn(*shape).to(dtype2)+10
+
+                print("*"*10, name, a.dtype, b.dtype, check_grad)
+                check(func, (a, b), check_grad=check_grad)
 
 
 def test_elemwise_ops_broadcast():
     for dtype1 in [T.float32, T.float64, T.int32, T.int64]:
         for dtype2 in [T.float32, T.float64, T.int32, T.int64]:
             funcs = [
-                ("add", lambda a, b:  a + b),
-                ("sub", lambda a, b:  a - b),
-                ("mul", lambda a, b:  a * b),
-                ("div", lambda a, b:  a / b),
-                ("lt", lambda a, b:  a < b),
-                ("le", lambda a, b:  a <= b),
-                ("gt", lambda a, b:  a > b),
-                ("ge", lambda a, b:  a >= b),
+                ("add", lambda a, b:  a + b, True),
+                ("sub", lambda a, b:  a - b, True),
+                ("mul", lambda a, b:  a * b, True),
+                ("div", lambda a, b:  a / b, True),
+                ("lt", lambda a, b:  a < b, False),
+                ("le", lambda a, b:  a <= b, False),
+                ("gt", lambda a, b:  a > b, False),
+                ("ge", lambda a, b:  a >= b, False),
             ]
 
-            a = T.randn(3, 1, 5, 9).to(dtype1)+10
-            b = T.randn(7, 1, 9).to(dtype2)+10
+            for name, func, check_grad in funcs:
+                a = T.randn(3, 1, 5, 9).to(dtype1)+10
+                b = T.randn(7, 1, 9).to(dtype2)+10
 
-            for name, func in funcs:
-                print(name, a.dtype, b.dtype)
-                check(func(a, b), func(from_torch(a), from_torch(b)))
+                check_grad = check_grad and (
+                    dtype1.is_floating_point or dtype2.is_floating_point)
+
+                print("*"*10, name, a.dtype, b.dtype, check_grad)
+
+                check(func, (a, b), check_grad=check_grad)
 
 
 def test_bin_ops():
@@ -58,11 +65,14 @@ def test_bin_ops():
         ]
 
         shape = (3, 7, 5, 9)
-        a = T.randn(*shape).to(dtype)
-        b = 3
         for name, func in funcs:
-            print(name, a.dtype, b)
-            check(func(a, b), func(from_torch(a), b))
+            check_grad = dtype.is_floating_point
+
+            a = T.randn(*shape).to(dtype)
+            b = 3
+
+            print("*"*10, name, dtype, check_grad)
+            check(func, (a, b), check_grad=check_grad)
 
 
 def test_slicing():
@@ -70,7 +80,8 @@ def test_slicing():
     for dtype in [np.float32, np.float64, np.int32, np.int64]:
         np.random.seed(0)
         shape = (70, 5, 90)
-        a = np.random.randn(*shape).astype(dtype)
+        a1 = np.random.randn(*shape).astype(dtype)
+        a2 = from_numpy(a1)
 
         for i, slices in enumerate([
             (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
@@ -80,7 +91,7 @@ def test_slicing():
         ]):
             print(i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check(a[slices], from_numpy(a)[slices])
+            check_result(a1[slices], a2[slices].numpy())
 
 
 def test_nested_slicing():
@@ -89,7 +100,8 @@ def test_nested_slicing():
         np.random.seed(0)
         T.manual_seed(0)
         shape = (70, 5, 10, 90)
-        a = np.random.randn(*shape).astype(dtype)
+        a1 = np.random.randn(*shape).astype(dtype)
+        a2 = from_numpy(a1)
 
         for i, slices in enumerate([
             (slice(1, 2, None), slice(2, None, 2), slice(2, None, 4)),
@@ -99,7 +111,7 @@ def test_nested_slicing():
         ]):
             print(i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check(a[1:, :3, 2][slices], from_numpy(a)[1:, :3, 2][slices])
+            check_result(a1[1:, :3, 2][slices], a2[1:, :3, 2][slices].numpy())
 
 
 def test_view_offset():
@@ -168,7 +180,7 @@ def test_reduce_axis_ops():
             a = T.rand(shape).to(dtype)
             for opname, func in ops:
                 print(f"{dtype=}, {opname=}, {keepdim=}")
-                check(func(a), func(from_torch(a)))
+                check(func, (a,))
 
 
 def test_reduce_ops():
@@ -186,7 +198,7 @@ def test_reduce_ops():
         a = (T.randn(*shape) - 100).to(dtype)
         for opname, func in ops:
             print(dtype, opname)
-            check(func(a), func(from_torch(a)))
+            check(func, (a,))
 
 
 def test_reduce_ops_no_axis():
@@ -205,7 +217,7 @@ def test_reduce_ops_no_axis():
         a = (T.randn(*shape) + 10).to(dtype)
         for opname, func in ops:
             print(dtype, opname)
-            check(func(a), func(from_torch(a)))
+            check(func, (a,))
 
 
 def test_uops():
@@ -219,7 +231,7 @@ def test_uops():
         a = (T.randn(*shape)+10).to(dtype)
         for opname, func in ops:
             print(opname)
-            check(func(a), func(from_torch(a)))
+            check(func, (a,))
 
 
 def test_views():
@@ -243,7 +255,7 @@ def test_views():
         for opname, func in ops:
             func(from_torch(a))
             print(opname)
-            check(func(a), func(from_torch(a)))
+            check(func, (a,))
 
 
 def test_matmul():
@@ -254,7 +266,7 @@ def test_matmul():
     def func(a, b):
         return a @ b
 
-    check(func(a, b), func(from_torch(a), from_torch(b)))
+    check(func, (a, b))
 
 
 def test_complex():
@@ -267,7 +279,7 @@ def test_complex():
         def func(a, b):
             return (((a*b)+10) / 12.0).mean()
 
-        check(func(a, b), func(from_torch(a), from_torch(b)))
+        check(func, (a, b))
 
 
 def test_other_ops():
@@ -277,4 +289,4 @@ def test_other_ops():
     for func in [relu]:
         T.manual_seed(0)
         a = T.randn(3, 5, 7)
-        check(func(a), func(from_torch(a)))
+        check(func, (a,))

@@ -1,10 +1,15 @@
+from __future__ import annotations
 import os
 import numpy as np
-from typing import Self
+from typing import Self, Optional, overload, TYPE_CHECKING
 from cuda import _cuda_ops
 from cuda.alloc import CudaAllocator, Buffer
 from cuda.utils import promote_dtype, promote_uop_dtype, assert_cuda_error
 from cuda.op_names import *
+import grad as grad_ops
+from grad import differentiable_function, DifferentiableFunction, broadcastable
+if TYPE_CHECKING:
+    from grad import ElemWiseBackwardFn, ElemWiseBackwardFnWrapper, UnaryOpBackwardFnWrapper, UnaryOpBackwardFn
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -29,6 +34,8 @@ class Tensor:
 
     def __init__(self, data: Buffer) -> None:
         self.data = data
+        self._requires_gradient = False
+        self._grad: Optional[Tensor] = None
 
     @property
     def shape(self): return self.data.shape
@@ -104,35 +111,55 @@ class Tensor:
     def __del__(self):
         CudaAllocator.free(self.data)
 
+    @broadcastable
+    @differentiable_function(2)
     def __add__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("add", self, other)
+        return CUDA_OPS.elem_op("add", self, other, backward_fn=grad_ops.add_backward)
 
+    @broadcastable
+    @differentiable_function(2)
     def __mul__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("mul", self, other)
+        return CUDA_OPS.elem_op("mul", self, other, backward_fn=grad_ops.mul_backward)
 
+    @broadcastable
+    @differentiable_function(2)
     def __sub__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("sub", self, other)
+        return CUDA_OPS.elem_op("sub", self, other, backward_fn=grad_ops.sub_backward)
 
+    @broadcastable
+    @differentiable_function(2)
     def __truediv__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("div", self, other, floating_op=True)
+        return CUDA_OPS.elem_op("div", self, other, backward_fn=grad_ops.truediv_backward, floating_op=True)
 
+    # @differentiable_function(2)
+    @broadcastable
+    def __rtruediv__(self, other: int | float):
+        self, tensor_other = self.try_broadcast(other)
+        return tensor_other / self
+
+    @broadcastable
     def __lt__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("lt", self, other, floating_op=True)
+        return CUDA_OPS.elem_op("lt", self, other)
 
+    @broadcastable
     def __le__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("le", self, other, floating_op=True)
+        return CUDA_OPS.elem_op("le", self, other)
 
+    @broadcastable
     def __gt__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("gt", self, other, floating_op=True)
+        return CUDA_OPS.elem_op("gt", self, other)
 
+    @broadcastable
     def __ge__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("ge", self, other, floating_op=True)
+        return CUDA_OPS.elem_op("ge", self, other)
 
+    @differentiable_function(1)
     def exp(self):
-        return CUDA_OPS.uop("exp", self)
+        return CUDA_OPS.uop("exp", self, backward_fn=grad_ops.exp_backward)
 
+    @differentiable_function(1)
     def log(self):
-        return CUDA_OPS.uop("log", self)
+        return CUDA_OPS.uop("log", self, backward_fn=grad_ops.log_backward)
 
     def log2(self):
         return CUDA_OPS.uop("log2", self)
@@ -191,7 +218,11 @@ class Tensor:
                 return False
         return True
 
-    def try_broadcast(self, other: "Tensor"):
+    def try_broadcast(self, other: Self):
+        assert isinstance(self, Tensor)
+        if isinstance(other, (int, float)):
+            other = Tensor.from_numpy(np.array(other, dtype=self.dtype))
+            other = other.expand(*self.shape)
         if self.shape == other.shape:
             return self, other
 
@@ -210,11 +241,18 @@ class Tensor:
         expected_shape = expected_shape[::-1]
         return self.expand(*expected_shape), other.expand(*expected_shape)
 
+    @differentiable_function(1)
     def expand(self, *dims: int):
         if self.shape == dims:
-            return self
+            # this might be a problem
+            def backward(gradient: Tensor):
+                return gradient,
+            return self, backward
+
         new_shape = dims
         expected_stride = [0] * len(dims)
+        expanded_dims = []
+
         for i, d, sh, s in zip(range(self.ndim), dims[::-1], self.shape[::-1], self.stride[::-1]):
             if sh == d:
                 expected_stride[i] = s
@@ -222,8 +260,22 @@ class Tensor:
                 if sh != 1:
                     raise Exception(f"dimension at {i} should be 1")
                 expected_stride[i] = 0
+                expanded_dims.append(len(dims) - i - 1)
+
         expected_stride = expected_stride[::-1]
-        return self._as_view(new_shape, expected_stride)
+        expanded_dims = expanded_dims[::-1]
+
+        def backward(gradient: Tensor):
+            diff = len(dims) - self.ndim
+            if expanded_dims:
+                # reduce expanded dims to 1
+                gradient = gradient.sum(tuple(expanded_dims), keepdim=True)
+                if diff:
+                    # remove first added dims
+                    gradient = gradient.sum(tuple(range(diff)))
+            return gradient,
+
+        return self._as_view(new_shape, expected_stride), backward
 
     def view(self, *dims: int):
         if self.shape == dims:
@@ -335,6 +387,55 @@ class Tensor:
         else:
             raise NotImplementedError()
 
+    def backward(self, grad=None):
+        assert self._requires_gradient
+        if grad is None:
+            grad = Tensor.from_numpy(np.array(1, dtype=np.float32))
+
+        assert self.shape == grad.shape, (self.shape, grad.shape)
+
+        if (fn := getattr(self, "_backward", None)) is not None:
+            assert isinstance(fn, DifferentiableFunction), type(fn)
+            fn.backward(grad)
+        else:
+            self.grad = grad
+
+    def _set_backward_fn(self, func: DifferentiableFunction):
+        self._backward = func
+
+    @property
+    def grad(self):
+        assert self._requires_gradient, "This tensor doesn't require gradient"
+        return self._grad
+
+    @grad.setter
+    def grad(self, val: "Tensor"):
+        assert self._requires_gradient, "This tensor doesn't require gradient"
+        assert not val._requires_gradient, "Gradient tensors should not require gradient"
+        assert val.shape == self.shape, (
+            "The gradient should have the same shape as the tensor, "
+            f"Expected: {self.shape}, found {val.shape}"
+        )
+
+        if self._grad is None:
+            self._grad = val
+        else:
+            self._grad += val
+        # print("Accumulated grad", self)
+
+    @property
+    def requires_grad(self): return self._requires_gradient
+
+    @requires_grad.setter
+    def requires_grad(self, val: bool):
+        self._requires_gradient = val
+
+    def requires_grad_(self, val: bool):
+        if val and self.dtype not in [np.float32, np.float64]:
+            raise Exception("Only floating tensors can require grad")
+        self._requires_gradient = val
+        return self
+
 
 def clip(x, _min, _max):
     return max(_min, min(x, _max))
@@ -343,13 +444,28 @@ def clip(x, _min, _max):
 class CUDA_OPS:
     _kernels = _cuda_ops
 
+    @overload
     @classmethod
-    def elem_op(cls, op_name, a: Tensor, b: Tensor | int | float, floating_op=False):
-        assert isinstance(a, Tensor)
-        if isinstance(b, (int, float)):
-            b = Tensor.from_numpy(np.array(b, dtype=a.dtype))
-            b = b.expand(*a.shape)
+    def elem_op(
+        cls, op_name: str, a: Tensor, b: Tensor,
+        floating_op: bool = False,
+    ) -> Tensor: ...
 
+    @overload
+    @classmethod
+    def elem_op(
+        cls, op_name: str, a: Tensor, b: Tensor,
+        backward_fn: ElemWiseBackwardFnWrapper,
+        floating_op: bool = False,
+    ) -> tuple[Tensor, ElemWiseBackwardFn]: ...
+
+    @classmethod
+    def elem_op(
+        cls, op_name: str, a: Tensor, b: Tensor,
+        backward_fn: Optional[ElemWiseBackwardFnWrapper] = None,
+        floating_op=False,
+    ):
+        assert a.shape == b.shape
         if op_name in ["lt", "le", "gt", "ge"]:
             out_dtype = np.dtype(np.bool)
         else:
@@ -358,7 +474,6 @@ class CUDA_OPS:
         kernel = cls._kernels[elemwise_op_name(
             op_name, a.dtype, b.dtype, out_dtype)]
 
-        a, b = a.try_broadcast(b)
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
 
@@ -375,10 +490,31 @@ class CUDA_OPS:
             shape,
             ndim
         )
+        if backward_fn is not None:
+            return c, backward_fn(a, b, c)
         return c
 
     @classmethod
-    def uop(cls, op_name, a: Tensor, floating_op=True):
+    @overload
+    def uop(
+        cls, op_name: str, a: Tensor,
+        floating_op: bool = True
+    ) -> Tensor: ...
+
+    @classmethod
+    @overload
+    def uop(
+        cls, op_name: str, a: Tensor,
+        backward_fn: UnaryOpBackwardFnWrapper,
+        floating_op: bool = True
+    ) -> tuple[Tensor, UnaryOpBackwardFn]: ...
+
+    @classmethod
+    def uop(
+        cls, op_name: str, a: Tensor,
+        backward_fn: Optional[UnaryOpBackwardFnWrapper] = None,
+        floating_op: bool = True
+    ):
         out_dtype = promote_uop_dtype(a.dtype, floating_op)
         c = Tensor.empty(a.shape, dtype=out_dtype)
         kernel = cls._kernels[uop_name(op_name, a.dtype, out_dtype)]
@@ -393,6 +529,8 @@ class CUDA_OPS:
             shape,
             ndim
         )
+        if backward_fn is not None:
+            return c, backward_fn(a, c)
         return c
 
     @classmethod
