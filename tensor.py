@@ -7,7 +7,7 @@ from cuda.alloc import CudaAllocator, Buffer
 from cuda.utils import promote_dtype, promote_uop_dtype, assert_cuda_error
 from cuda.op_names import *
 import grad as grad_ops
-from grad import differentiable_function, DifferentiableFunction, broadcastable
+from grad import differentiable_function, DifferentiableFunction, broadcast
 if TYPE_CHECKING:
     from grad import ElemWiseBackwardFn, ElemWiseBackwardFnWrapper, UnaryOpBackwardFnWrapper, UnaryOpBackwardFn, ReduceOpBackwardFnWrapper, ReduceOpBackwardFn
 
@@ -112,50 +112,50 @@ class Tensor:
     def __del__(self):
         CudaAllocator.free(self.data)
 
-    @broadcastable
+    @broadcast()
     @differentiable_function(2)
     def __add__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("add", self, other, backward_fn=grad_ops.add_backward)
 
-    @broadcastable
+    @broadcast()
     @differentiable_function(2)
     def __mul__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("mul", self, other, backward_fn=grad_ops.mul_backward)
 
-    @broadcastable
+    @broadcast()
     @differentiable_function(2)
     def __sub__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("sub", self, other, backward_fn=grad_ops.sub_backward)
 
-    @broadcastable
+    @broadcast()
     @differentiable_function(2)
     def __truediv__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("div", self, other, backward_fn=grad_ops.truediv_backward, floating_op=True)
 
     # @differentiable_function(2)
-    @broadcastable
+    @broadcast()
     def __rtruediv__(self, other: int | float):
-        self, tensor_other = self.try_broadcast(other)
-        return tensor_other / self
+        return other / self
 
+    @broadcast(second_only=True)
     def __isub__(self, other: Tensor):
         assert self.shape == other.shape
         CUDA_OPS.elem_op("sub", self, other.astype(self.dtype), out=self)
         return self
 
-    @broadcastable
+    @broadcast()
     def __lt__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("lt", self, other)
 
-    @broadcastable
+    @broadcast()
     def __le__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("le", self, other)
 
-    @broadcastable
+    @broadcast()
     def __gt__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("gt", self, other)
 
-    @broadcastable
+    @broadcast()
     def __ge__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("ge", self, other)
 
@@ -242,7 +242,7 @@ class Tensor:
                 return False
         return True
 
-    def try_broadcast(self, other: Self):
+    def try_broadcast(self, other: Self, second_only=False):
         assert isinstance(self, Tensor)
         if isinstance(other, (int, float)):
             other = Tensor.from_numpy(np.array(other, dtype=self.dtype))
@@ -263,6 +263,9 @@ class Tensor:
             d2 = b_shape[i] if i < other.ndim else -1
             expected_shape[i] = max(d1, d2)
         expected_shape = expected_shape[::-1]
+        if second_only:
+            assert self.shape == expected_shape
+            return self, other.expand(*expected_shape)
         return self.expand(*expected_shape), other.expand(*expected_shape)
 
     @differentiable_function(1)

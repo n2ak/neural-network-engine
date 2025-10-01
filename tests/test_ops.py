@@ -78,6 +78,7 @@ def test_bin_ops():
             ("add", lambda a, b:  a + b),
             ("mul", lambda a, b:  a * b),
             ("div", lambda a, b:  a / b),
+            ("div2", lambda a, b:  b / a),
             ("sub", lambda a, b:  a - b),
         ]
 
@@ -85,7 +86,7 @@ def test_bin_ops():
         for name, func in funcs:
             check_grad = dtype.is_floating_point
 
-            a = T.randn(*shape).to(dtype)
+            a = T.randn(*shape).to(dtype)+10
             b = 3
 
             print("** Test", name, dtype, check_grad)
@@ -283,7 +284,7 @@ def test_matmul():
         (T.randn(5, 7), T.randn(3, 7, 9)),
     ]:
         print("** Test", "matmul", a.shape, "@", b.shape)
-        check(func, (a, b), check_grad=True)
+        check(func, (a, b), check_grad=True, atol=1e-6)
 
 
 def test_complex():

@@ -115,15 +115,17 @@ class InplaceBackwardFn:
 indent = 0
 
 
-def broadcastable(func: Callable[P, Tensor]) -> Callable[P, Tensor]:
-    import functools
+def broadcast(second_only=False):
+    def decorator(func: Callable[P, Tensor]) -> Callable[P, Tensor]:
+        import functools
 
-    @functools.wraps(func)
-    def wrapper(x: Tensor, y: Tensor, *args, **kwargs):
-        x, y = x.try_broadcast(y)
-        return func(x, y, *args, **kwargs)
+        @functools.wraps(func)
+        def wrapper(x: Tensor, y: Tensor, *args, **kwargs):
+            x, y = x.try_broadcast(y, second_only)
+            return func(x, y, *args, **kwargs)
 
-    return wrapper
+        return wrapper
+    return decorator
 
 
 def differentiable_function(number_of_args: int):
