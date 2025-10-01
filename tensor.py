@@ -88,8 +88,7 @@ class Tensor:
     def astype(self, dtype) -> "Tensor":
         if dtype == self.dtype:
             return self
-        # TODO: do it in gpu
-        return Tensor.from_numpy(self.numpy().astype(dtype))
+        return self.copy_to(Tensor.empty(self.shape, dtype))
 
     def numpy(self) -> np.typing.NDArray:
         data = self.data.numpy()
