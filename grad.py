@@ -160,7 +160,7 @@ def mul_backward(x: Tensor, other: Tensor, res: Tensor) -> ElemWiseBackwardFn:
 def truediv_backward(x: Tensor, other: Tensor, res: Tensor) -> ElemWiseBackwardFn:
     def backward(gradient: Tensor):
         dx = 1 / other * gradient
-        dother = gradient * x * -1 / (other*other)
+        dother = gradient * x * -1 / (other ** 2)
         return dx, dother
     return backward
 

@@ -154,6 +154,10 @@ class Tensor:
     def __ge__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("ge", self, other)
 
+    def __pow__(self, other: int):
+        assert other == 2
+        return self * self
+
     @differentiable_function(1)
     def exp(self):
         return CUDA_OPS.uop("exp", self, backward_fn=grad_ops.exp_backward)
