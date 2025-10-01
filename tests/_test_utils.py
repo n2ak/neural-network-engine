@@ -90,6 +90,8 @@ def check_numpy(a1_numpy: np.ndarray, a2_numpy: np.ndarray, rtol=1e-05,
             a1_numpy.strides, a2_numpy.strides)
     assert a1_numpy.shape == a2_numpy.shape, (a1_numpy.shape, a2_numpy.shape)
 
+    assert np.all(np.isfinite(a2_numpy))
+
     if not np.allclose(a1_numpy, a2_numpy, rtol=rtol, atol=atol):
         raise Exception(
             f"mean_diff: {np.abs(a1_numpy.astype(float) - a2_numpy.astype(float)).mean()}\n"

@@ -78,7 +78,6 @@ def test_bin_ops():
 def test_slicing():
 
     for dtype in [np.float32, np.float64, np.int32, np.int64]:
-        np.random.seed(0)
         shape = (70, 5, 90)
 
         for i, slices in enumerate([
@@ -97,8 +96,6 @@ def test_slicing():
 def test_nested_slicing():
 
     for dtype in [np.float32, np.float64, np.int32, np.int64]:
-        np.random.seed(0)
-        T.manual_seed(0)
         shape = (70, 5, 10, 90)
 
         for i, slices in enumerate([
@@ -176,7 +173,6 @@ def test_reduce_axis_ops():
             mean_axis = 1, 2
             max_axis = 2  # torch only accpets one axis for max
             sum_axis = 1, 2, 3
-            T.manual_seed(1)
             for opname, func, check_grad in ops:
                 a = T.rand(shape).to(dtype)
                 print("** Test", f"{dtype=}, {opname=}, {keepdim=}")
@@ -240,7 +236,6 @@ def test_views():
 
 def test_matmul():
     print()
-    T.manual_seed(0)
 
     def func(a, b):
         return a @ b
@@ -275,7 +270,6 @@ def test_other_ops():
         a[a < 0] = 0
         return a
     for func in [relu]:
-        T.manual_seed(0)
         a = T.randn(3, 5, 7)
         check(func, (a,), check_grad=True)
 
@@ -284,7 +278,6 @@ def test_softmax():
     import nn
     batch = 9
     outc = 10
-    T.manual_seed(0)
 
     input1 = T.randn((batch, outc)).requires_grad_(True)
     input2 = from_torch(input1)
@@ -304,7 +297,6 @@ def test_log_softmax():
     import nn
     batch = 9
     outc = 10
-    T.manual_seed(0)
 
     tlogits = T.randn((batch, outc)).requires_grad_(True)
 
@@ -325,7 +317,6 @@ def test_nll():
     import nn
     batch = 9
     outc = 10
-    T.manual_seed(0)
 
     tlogits = T.randn((batch, outc))
     tlogits[tlogits > 0] = 0
@@ -352,7 +343,6 @@ def test_cross_entropy():
     import grad
     batch = 9
     outc = 10
-    T.manual_seed(0)
     tlogits = T.randn((batch, outc)).requires_grad_(True)
     ty = T.randint(0, outc, (batch,), dtype=T.int32)
 
