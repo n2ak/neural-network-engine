@@ -2,7 +2,12 @@ import numpy as np
 
 
 class DataLoader:
-    def __init__(self, *arrs: np.typing.NDArray, batch_size=64, shuffle=True):
+    def __init__(
+        self,
+        *arrs: np.typing.NDArray,
+        batch_size=64,
+        shuffle=True,
+    ):
         self.arrs = arrs
         self.batch_size = batch_size
         self.shuffle = shuffle

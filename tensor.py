@@ -56,8 +56,8 @@ class Tensor:
         return expected_stride == stride
 
     @staticmethod
-    def from_numpy(data: np.typing.NDArray | int | float):
-        if isinstance(data, (int, float)):
+    def from_numpy(data: np.typing.NDArray | int | float | list):
+        if not isinstance(data, np.ndarray):
             data = np.array(data)
         assert isinstance(data, np.ndarray), type(data)
         return Tensor(
@@ -138,6 +138,11 @@ class Tensor:
         self, tensor_other = self.try_broadcast(other)
         return tensor_other / self
 
+    def __isub__(self, other: Tensor):
+        assert self.shape == other.shape
+        CUDA_OPS.elem_op("sub", self, other.astype(self.dtype), out=self)
+        return self
+
     @broadcastable
     def __lt__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("lt", self, other)
@@ -161,6 +166,10 @@ class Tensor:
     @differentiable_function(1)
     def exp(self):
         return CUDA_OPS.uop("exp", self, backward_fn=grad_ops.exp_backward)
+
+    def sqrt(self):
+        # TODO add it to uops
+        return Tensor.from_numpy(np.sqrt(self.numpy()))
 
     @differentiable_function(1)
     def log(self):
@@ -438,14 +447,16 @@ class Tensor:
         return self._grad
 
     @grad.setter
-    def grad(self, val: "Tensor"):
+    def grad(self, val: Self | None):
+        if val is None:
+            self._grad = None
+            return
         assert self._requires_gradient, "This tensor doesn't require gradient"
         assert not val._requires_gradient, "Gradient tensors should not require gradient"
         assert val.shape == self.shape, (
             "The gradient should have the same shape as the tensor, "
             f"Expected: {self.shape}, found {val.shape}"
         )
-
         if self._grad is None:
             self._grad = val
         else:
@@ -478,6 +489,7 @@ class CUDA_OPS:
     def elem_op(
         cls, op_name: str, a: Tensor, b: Tensor,
         floating_op: bool = False,
+        out: Optional[Tensor] = None,
     ) -> Tensor: ...
 
     @overload
@@ -486,6 +498,7 @@ class CUDA_OPS:
         cls, op_name: str, a: Tensor, b: Tensor,
         backward_fn: ElemWiseBackwardFnWrapper,
         floating_op: bool = False,
+        out: Optional[Tensor] = None,
     ) -> tuple[Tensor, ElemWiseBackwardFn]: ...
 
     @classmethod
@@ -493,20 +506,28 @@ class CUDA_OPS:
         cls, op_name: str, a: Tensor, b: Tensor,
         backward_fn: Optional[ElemWiseBackwardFnWrapper] = None,
         floating_op=False,
+        out: Optional[Tensor] = None,
     ):
         assert a.shape == b.shape
-        if op_name in ["lt", "le", "gt", "ge"]:
-            out_dtype = np.dtype(np.bool)
+        if out is None:
+            if op_name in ["lt", "le", "gt", "ge"]:
+                out_dtype = np.dtype(np.bool)
+            else:
+                out_dtype = np.dtype(promote_dtype(
+                    a.dtype, b.dtype, floating_op))
         else:
-            out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
+            out_dtype = out.dtype
 
         kernel = cls._kernels[elemwise_op_name(
             op_name, a.dtype, b.dtype, out_dtype)]
 
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
-
-        c = Tensor.empty(a.shape, dtype=out_dtype)
+        if out is not None:
+            c = out
+            assert a.shape == out.shape
+        else:
+            c = Tensor.empty(a.shape, dtype=out_dtype)
 
         a_stride = np.array(a.stride, dtype=np.int32)
         b_stride = np.array(b.stride, dtype=np.int32)

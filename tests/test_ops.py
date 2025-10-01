@@ -55,6 +55,23 @@ def test_elemwise_ops_broadcast():
                 check(func, (a, b), check_grad=check_grad)
 
 
+def test_elemwise_ops_inplace():
+    for dtype1 in [T.float32, T.float64, T.int32, T.int64]:
+        def isub(a, b):
+            a -= b
+            return a
+        funcs = [
+            ("isub", isub),
+        ]
+
+        for name, func in funcs:
+            a = T.randn(3, 1, 5, 9).to(dtype1)+10
+            b = T.randn(3, 1, 5, 9).to(dtype1)+10
+            print("** Test", name, a.dtype, b.dtype)
+
+            check(func, (a, b), check_grad=False)
+
+
 def test_bin_ops():
     for dtype in [T.float32, T.float64, T.int32, T.int64]:
         funcs = [
@@ -73,6 +90,26 @@ def test_bin_ops():
 
             print("** Test", name, dtype, check_grad)
             check(func, (a, b), check_grad=check_grad)
+
+
+def test_bin_ops_inplace():
+    for dtype in [T.float32, T.float64, T.int32, T.int64]:
+        def isub(a, b):
+            a -= b
+            return a
+        funcs = [
+            ("isub", isub),
+        ]
+
+        shape = (3, 7, 5, 9)
+        for name, func in funcs:
+            check_grad = dtype.is_floating_point
+
+            a = T.randn(*shape).to(dtype)
+            b = 3
+
+            print("** Test", name, dtype, check_grad)
+            check(func, (a, b), check_grad=False)
 
 
 def test_slicing():

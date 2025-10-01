@@ -3,7 +3,7 @@ import nn
 import torch as T
 
 from tensor import Tensor
-from utils import dataloader
+from utils import DataLoader
 from grad import Grad
 from _test_utils import check, from_torch, check_tensor
 
@@ -91,7 +91,7 @@ def test_minist():
     X, y = X.astype(np.float32), y.astype(np.int32)  # type: ignore
 
     model = Model(X.shape[1], 10)
-    for batch_X, batch_y in dataloader(X, y):
+    for batch_X, batch_y in DataLoader(X, y):
         batch_X = Tensor.from_numpy(batch_X)
         batch_y = Tensor.from_numpy(batch_y)
         with Grad.on():
