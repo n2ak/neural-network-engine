@@ -1,6 +1,6 @@
 import numpy as np
 import torch as T
-from _test_utils import check, from_torch, from_numpy, check_numpy
+from _test_utils import check, from_torch, from_numpy, check_numpy, check_tensor
 
 
 def test_elemwise_ops():
@@ -278,3 +278,95 @@ def test_other_ops():
         T.manual_seed(0)
         a = T.randn(3, 5, 7)
         check(func, (a,), check_grad=True)
+
+
+def test_softmax():
+    import nn
+    batch = 9
+    outc = 10
+    T.manual_seed(0)
+
+    input1 = T.randn((batch, outc)).requires_grad_(True)
+    input2 = from_torch(input1)
+
+    res1 = T.nn.functional.softmax(input1, -1)
+    res2 = nn.softmax(input2, -1)
+
+    check_tensor(
+        (input1,),
+        (input2,),
+        res1,
+        res2
+    )
+
+
+def test_log_softmax():
+    import nn
+    batch = 9
+    outc = 10
+    T.manual_seed(0)
+
+    tlogits = T.randn((batch, outc)).requires_grad_(True)
+
+    logits = from_torch(tlogits)
+
+    tloss = T.nn.functional.log_softmax(tlogits, -1)
+    loss = nn.log_softmax(logits, -1)
+
+    check_tensor(
+        (tlogits,),
+        (logits,),
+        tloss,
+        loss
+    )
+
+
+def test_nll():
+    import nn
+    batch = 9
+    outc = 10
+    T.manual_seed(0)
+
+    tlogits = T.randn((batch, outc))
+    tlogits[tlogits > 0] = 0
+
+    tlogits = tlogits.requires_grad_(True)
+    ty = T.randint(0, outc, (batch,))
+
+    logits = from_torch(tlogits)
+    y = from_torch(ty)
+
+    tloss = T.nn.functional.nll_loss(tlogits, ty)
+    loss = nn.negative_log_likelihood(logits, y)
+
+    check_tensor(
+        (tlogits,),
+        (logits,),
+        tloss,
+        loss
+    )
+
+
+def test_cross_entropy():
+    import nn
+    import grad
+    batch = 9
+    outc = 10
+    T.manual_seed(0)
+    tlogits = T.randn((batch, outc)).requires_grad_(True)
+    ty = T.randint(0, outc, (batch,), dtype=T.int32)
+
+    logits = from_torch(tlogits)
+    y = from_torch(ty)
+
+    tloss = T.nn.functional.cross_entropy(tlogits, ty.long())
+    with grad.Grad.on():
+        loss = nn.cross_entropy(logits, y)
+
+    check_tensor(
+        (tlogits,),
+        (logits,),
+        tloss,
+        loss,
+        check_grad=True
+    )

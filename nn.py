@@ -2,6 +2,7 @@ import numpy as np
 from typing import Generic, Type, TypeVar, Any
 from abc import ABC, abstractmethod
 from tensor import Tensor
+from grad import differentiable_function
 
 T = TypeVar("T")
 
@@ -92,20 +93,36 @@ class ReLU(Module[Tensor]):
         return x
 
 
+@differentiable_function(1)
 def cross_entropy(input: Tensor, target: Tensor, dim=-1):
     assert input.ndim == 2
     assert target.ndim == 1
     assert input.shape[0] == target.shape[0]
+
     x = log_softmax(input, dim)
-    x = negative_log_likelihood(x.numpy(), target.numpy())
-    return x
+    x = negative_log_likelihood(x, target)
+    batch = target.shape[0]
+
+    def backward(gradient: Tensor):
+        dx = softmax(input, dim=dim).numpy()
+        dx[list(range(batch)), target.numpy().astype(int)] -= 1
+        dx /= batch
+        return Tensor.from_numpy(dx * gradient.numpy()),
+
+    return x, backward
 
 
-def negative_log_likelihood(input: np.ndarray, target: np.ndarray):
+def negative_log_likelihood(tinput: Tensor, ttarget: Tensor):
+    # we don't support selecting with lists yet! (input[list1,list2,...])
+    input = tinput.numpy()
+    target = ttarget.numpy()
+
     assert np.all(input <= 0), input <= 0
     indices = target.astype(int)
     assert input.shape[0] == target.shape[0], "Input and target should have same batch size."
-    res = input[:, indices] * -1
+
+    # NOTE: input[:, indices] yields wrong result
+    res = input[np.arange(target.size), indices] * -1
     return Tensor.from_numpy(np.array(res.mean()))
 
 
@@ -113,4 +130,11 @@ def log_softmax(x: Tensor, dim=-1) -> Tensor:
     max = x.max(dim, keepdim=True)
     new_x = x - max
     res = new_x - new_x.exp().sum(dim, keepdim=True).log()
+    return res
+
+
+def softmax(x: Tensor, dim: int = -1) -> Tensor:
+    m = x - x.max(axis=dim, keepdim=True)
+    e = m.exp()
+    res = e/e.sum(axis=dim, keepdim=True)
     return res
