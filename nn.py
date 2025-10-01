@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Generic, Type, TypeVar, Any
+from typing import Generic, Type, TypeVar, Any, Generator
 from abc import ABC, abstractmethod
 from tensor import Tensor
 from grad import differentiable_function
@@ -35,21 +35,32 @@ class Module(Generic[T], ABC):
             f"class {self.__class__.__name__} doesn't implement _load_state"
         )
 
+    def parameters(self) -> Generator[Tensor, None, None]:
+        for attr, value in self.__dict__.items():
+            if issubclass(value.__class__, Module):
+                yield from value.parameters()
+            elif isinstance(value, Tensor) and value.requires_grad:
+                yield value
+
+    @property
+    def name(self): return self.__class__.__name__
+
 
 class Linear(Module[Tensor]):
 
     def __init__(self, inc: int, outc: int, bias=True) -> None:
         self.bias = None
 
-        self.weight = Tensor.randn(outc, inc).requires_grad_(True)
+        self.weight = kaiming((outc, inc), fan_mode=inc).requires_grad_(True)
         if bias:
-            self.bias = Tensor.randn(outc).requires_grad_(True)
+            self.bias = kaiming((outc,), fan_mode=inc).requires_grad_(True)
 
     def forward(self, x):
-        res = x @ self.weight.transpose(0, 1)
+        x = x @ self.weight.transpose(0, 1)
         if self.bias is not None:
-            res = res + self.bias
-        return res
+            x = x + self.bias
+
+        return x
 
     def _load_state(self, member_path: list[str], state):
         assert len(member_path) == 1
@@ -77,7 +88,7 @@ class Sequential(Module[Any]):
         self.layers = layers
 
     def forward(self, x):
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             x = layer.forward(x)
         return x
 
@@ -85,6 +96,10 @@ class Sequential(Module[Any]):
         assert member_path[0].isdigit()
         index = int(member_path[0])
         self.layers[index]._load_state(member_path[1:], state)
+
+    def parameters(self):
+        for l in self.layers:
+            yield from l.parameters()
 
 
 class ReLU(Module[Tensor]):
@@ -116,8 +131,8 @@ def negative_log_likelihood(tinput: Tensor, ttarget: Tensor):
     # we don't support selecting with lists yet! (input[list1,list2,...])
     input = tinput.numpy()
     target = ttarget.numpy()
-
-    assert np.all(input <= 0), input <= 0
+    assert (np.all(input <= 0),
+            f"Not all elements are negative, has NaNs: {np.any(np.isnan(input))}, max: {input.max()}")
     indices = target.astype(int)
     assert input.shape[0] == target.shape[0], "Input and target should have same batch size."
 
@@ -138,3 +153,50 @@ def softmax(x: Tensor, dim: int = -1) -> Tensor:
     e = m.exp()
     res = e/e.sum(axis=dim, keepdim=True)
     return res
+
+
+def kaiming(
+    size,
+    fan_mode,
+    distribution="normal",
+    fun="relu",
+    dtype=np.float32,
+):
+    import numpy as np
+
+    gain = get_gain(fun)
+    if isinstance(fan_mode, str):
+        assert fan_mode in ["fan_in", "fan_out"]
+        f_in, f_out = calculate_fans(size)
+        fan_mode = f_in if fan_mode == "fan_in" else f_out
+    match distribution:
+        case "normal":
+            std = gain/np.sqrt(fan_mode)
+            t = np.random.normal(0, std**2, size)
+        case "uniform":
+            bounds = gain * np.sqrt(3/(fan_mode))
+            t = np.random.uniform(-bounds, bounds, size)
+        case _:
+            raise NotImplementedError(f"Unknown distribution: {distribution}")
+    return Tensor.from_numpy(t.astype(dtype))
+
+
+def get_gain(fun: str):
+    import numpy as np
+    # https://pytorch.org/docs/stable/nn.init.html#torch.nn.init.calculate_gain
+    fun = fun.lower()
+    ones = ["conv1d", "conv2d", "conv3d", "sigmoid", "linear", "identity"]
+    if fun in ones:
+        return 1
+    d = {
+        "relu": np.sqrt(2),
+        "selu": 3/4,
+        "tanh": 5/4
+    }
+    return d[fun]
+
+
+def calculate_fans(shape):
+    import numpy as np
+    prod = np.prod(shape)
+    return prod//shape[1], prod//shape[0]
