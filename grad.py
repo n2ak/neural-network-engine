@@ -54,6 +54,10 @@ class DifferentiableFunction():
         with Grad.on(False):
             # No gradient inside differentiable functions
             result, backward_fn = self.function(*args, **kwds)
+            if id(result) == id(args[0]):
+                # this happens because some ops like "view" and "exapnd" can return self
+                source: Tensor = args[0]
+                return source
         if Grad.is_on():
             # print("Called", self.name, "Inputs:", args)
             # we setup for backward pass

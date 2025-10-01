@@ -258,13 +258,13 @@ def test_complex():
     for dtype in [T.float32, T.float64, T.int32, T.int64]:
         a_shape = (3, 5, 7, 9)
         b_shape = (5, 1, 9)
-        a = (T.randn(*a_shape)+10).to(dtype)
-        b = (T.randn(*b_shape)+10).to(dtype)
 
         def func(a, b):
             return (((a*b)+10) / 12.0).mean()
 
-        check(func, (a, b))
+        a = T.randn(*a_shape).to(dtype)
+        b = T.randn(*b_shape).to(dtype)
+        check(func, (a, b), check_grad=True)
 
 
 def test_other_ops():
