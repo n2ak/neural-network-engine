@@ -1,6 +1,6 @@
 
 import ctypes
-from ctypes import c_int, c_void_p
+from ctypes import c_int, c_void_p, POINTER
 from .utils import _define_func, _int_1d_array, promote_dtype
 
 
@@ -43,6 +43,13 @@ def setitem_code(dtype: str):
 
 
 def other_ops_source_code():
+    return "\n".join([
+        setitem_source_code(),
+        get_copyout_code(),
+    ])
+
+
+def setitem_source_code():
     return "\n\n".join(map(lambda v: setitem_code(v), SETITEM_DTYPES))
 
 
@@ -50,3 +57,39 @@ def register_other_ops(lib: ctypes.CDLL, ops: dict):
     for dtype in SETITEM_DTYPES:
         opname = setitem_op_name(dtype)
         ops[opname] = define_setitem_op(lib, opname)
+
+    define_copyout(lib, ops)
+    define_copyout_indices(lib, ops)
+
+
+def define_copyout(lib, ops):
+    for in_dtype in ["float32", "float64", "int32", "int64"]:
+        for out_dtype in ["float32", "float64", "int32", "int64"]:
+            name = f"copy_out_{in_dtype}_{out_dtype}"
+            ops[name] = _define_func(lib[name], [
+                c_void_p,  _int_1d_array(), _int_1d_array(),
+                c_void_p,
+                c_int,
+            ], None)
+
+
+def define_copyout_indices(lib, ops):
+    for dtype in ["float32", "float64", "int32", "int64"]:
+        name = f"copy_out_indices_{dtype}"
+        ops[name] = _define_func(lib[name], [
+            # const T * d_A, const int * shape_A, const int * stride_A,
+            c_void_p,  _int_1d_array(), _int_1d_array(),
+            # T * d_C, const int ** indices, const int * shape_C,
+            c_void_p, POINTER(c_void_p), _int_1d_array(),
+            # int ndim_A
+            c_int,
+        ], None)
+
+
+def get_copyout_code():
+    dtypes = ["float32", "float64", "int32", "int64"]
+    return "\n".join([
+        f"COPY_OUT({in_dtype},{out_dtype})"
+        for in_dtype in dtypes
+        for out_dtype in dtypes
+    ])

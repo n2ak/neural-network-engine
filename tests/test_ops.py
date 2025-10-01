@@ -128,6 +128,20 @@ def test_bin_ops_inplace():
             check(func, (a, b), check_grad=False)
 
 
+def test_copy():
+    from tensor import Tensor
+    for in_dtype in [np.float32, np.float64, np.int32, np.int64]:
+        for out_dtype in [np.float32, np.float64, np.int32, np.int64]:
+            a = Tensor.randn(3, 9, dtype=in_dtype)
+            b = Tensor.randn(3, 9, dtype=out_dtype)
+
+            a.copy_to(b)
+
+            a_numpy = a.numpy().astype(b.dtype)
+            b_numpy = b.numpy()
+            assert np.allclose(a_numpy, b_numpy), (a_numpy, b_numpy)
+
+
 def test_slicing():
 
     for dtype in [np.float32, np.float64, np.int32, np.int64]:

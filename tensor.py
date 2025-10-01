@@ -68,22 +68,9 @@ class Tensor:
     def randn(*shape: int, dtype=np.float32):
         return Tensor.from_numpy(np.random.randn(*shape).astype(dtype))
 
-    # def cpu(self) -> "Tensor":
-    #     if self.is_cpu:
-    #         return self
-    #     if self.data.is_view:  # type: ignore
-    #         assert self.data.parent is not None  # type: ignore
-    #         dst = Tensor.empty(
-    #             self.shape,
-    #             dtype=self.dtype,
-    #         )
-    #         CUDA_OPS.copy_to(self.data, dst)  # type: ignore
-    #         return dst.cpu()
-    #     data = CudaAllocator.from_cuda(
-    #         self.data, self.shape, self.dtype, stride=self.stride)  # type: ignore
-    #     return Tensor(
-    #         data,
-    #     )
+    def copy_to(self, out: "Tensor") -> "Tensor":
+        assert self.shape == out.shape, (self.shape, out.shape)
+        return CUDA_OPS.copy_out(self, out)
 
     @classmethod
     def empty(cls, shape, dtype: np.typing.DTypeLike = np.float32, ):
@@ -739,19 +726,17 @@ class CUDA_OPS:
 
     @classmethod
     def copy_out(cls, src: Tensor, dst: Tensor):
-        kernel_name = f"copy_out_{dst.dtype}"
+        kernel_name = f"copy_out_{src.dtype}_{dst.dtype}"
         kernel = cls._kernels[kernel_name]
 
         src_shape = np.array(src.shape, dtype=np.int32)
-        dst_shape = np.array(dst.shape, dtype=np.int32)
         src_stride = np.array(src.stride, dtype=np.int32)
-        dst_stride = np.array(dst.stride, dtype=np.int32)
+        assert dst.is_contiguous
 
         kernel(
             src.data.ptr, src_shape, src_stride,  # type: ignore
-            dst.data.ptr, dst_shape, dst_stride,  # type: ignore
+            dst.data.ptr,  # type: ignore
             src.ndim,
-            dst.ndim,
         )
         return dst
 

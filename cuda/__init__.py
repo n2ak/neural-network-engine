@@ -6,7 +6,7 @@ import subprocess
 
 
 from ._other_ops import register_other_ops, other_ops_source_code
-from ._bin_ops import define_matmul, define_copyout
+from ._bin_ops import define_matmul
 from ._unary_ops import unary_ops_source_code, register_uops
 from ._reduce_ops import reduction_ops_source_code, register_reduce_ops
 from ._elemwsie_ops import element_wise_source_code, register_elemwise_ops
@@ -53,7 +53,6 @@ def compile():
     register_uops(lib, ops)
     register_reduce_ops(lib, ops)
     ops["matmul_batched"] = define_matmul(lib)
-    define_copyout(lib, ops)
     register_other_ops(lib, ops)
     return ops
 
