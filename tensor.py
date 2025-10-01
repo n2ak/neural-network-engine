@@ -201,10 +201,17 @@ class Tensor:
             *dims
         )
 
+    @differentiable_function(1)
     def permute(self, *dims: int):
         new_stride = [self.stride[d] for d in dims]
         new_shape = [self.shape[d] for d in dims]
-        return self._as_view(new_shape, new_stride)
+        out = self._as_view(new_shape, new_stride)
+
+        def backward(gradient: Tensor):
+            gradient_dims = [dims.index(i) for i in range(self.ndim)]
+            gradient = gradient.permute(*gradient_dims)
+            return gradient,
+        return out, backward
 
     def contiguous(self):
         if self.is_contiguous:
@@ -273,34 +280,41 @@ class Tensor:
             if expanded_dims:
                 # reduce expanded dims to 1
                 gradient = gradient.sum(tuple(expanded_dims), keepdim=True)
-                if diff:
-                    # remove first added dims
-                    gradient = gradient.sum(tuple(range(diff)))
+            if diff:
+                # remove first added dims
+                gradient = gradient.sum(tuple(range(diff)))
+
             return gradient,
 
         return self._as_view(new_shape, expected_stride), backward
 
+    @differentiable_function(1)
     def view(self, *dims: int):
-        if self.shape == dims:
-            return self
-        dims_l = list(dims)
-        m_one = list(filter(lambda x: x == -1, dims))
-        match len(m_one):
-            case 0: pass
-            case 1:
-                index = dims_l.index(-1)
-                dims_l.pop(index)
-                dims_l.insert(
-                    index, (self.size // np.prod(dims_l)).astype(int).item())
-                dims = tuple(dims_l)
-            case _:
-                raise Exception("Only one dimention can have -1")
-        assert np.prod(dims) == self.size
-        assert self.is_contiguous
-        return self._as_view(
-            dims,
-            stride_from_shape(dims)
-        )
+        if self.shape != dims:
+            assert self.is_contiguous
+            dims_l = list(dims)
+            m_one = list(filter(lambda x: x == -1, dims))
+            match len(m_one):
+                case 0: pass
+                case 1:
+                    index = dims_l.index(-1)
+                    dims_l.pop(index)
+                    dims_l.insert(
+                        index, (self.size // np.prod(dims_l)).astype(int).item())
+                    dims = tuple(dims_l)
+                case _:
+                    raise Exception("Only one dimention can have -1")
+            assert np.prod(dims) == self.size
+            out = self._as_view(
+                dims,
+                stride_from_shape(dims)
+            )
+        else:
+            out = self
+
+        def backward(gradient: Tensor):
+            return gradient.view(*self.shape),
+        return out, backward
 
     def _as_view(self, shape, stride, ptr_offset=0, slice=None):
         return Tensor(

@@ -183,7 +183,7 @@ def test_reduce_axis_ops():
                 check(func, (a,), check_grad=check_grad)
 
 
-def test_reduce_ops():
+def test_reduce_ops_no_axis():
     for dtype in [T.float32, T.float64, T.int32, T.int64]:
         torch_dtype = T.float32
         if dtype == T.float64:
@@ -199,25 +199,6 @@ def test_reduce_ops():
             a = (T.randn(*shape) - 100).to(dtype)
             print("** Test", dtype, opname, check_grad)
             check(func, (a,), check_grad=check_grad)
-
-
-def test_reduce_ops_no_axis():
-    for dtype in [T.float32, T.float64, T.int32, T.int64]:
-        torch_dtype = T.float32
-        if dtype == T.float64:
-            torch_dtype = T.float64
-        ops = [
-            ("sum", lambda x: x.sum()),
-            ("max", lambda x: x.max()
-                if isinstance(x, T.Tensor) else x.max()),
-            ("mean", lambda x: x.mean(dtype=torch_dtype)
-                if isinstance(x, T.Tensor) else x.mean()),
-        ]
-        shape = (3, 5, 7, 9)
-        for opname, func in ops:
-            a = (T.randn(*shape) + 10).to(dtype)
-            print("** Test", dtype, opname)
-            check(func, (a,))
 
 
 def test_uops():
@@ -237,13 +218,13 @@ def test_uops():
 def test_views():
     for dtype in [T.float32, T.float64, T.int32, T.int64]:
         ops = [
-            ("view1", lambda x: x.view(-1)),
-            ("view4", lambda x: x.view(1, -1, 1)),
-            ("view2", lambda x: x.view(*view_shape)),
-            ("view3", lambda x: x.view(*view_shape2)),
-            ("expand", lambda x: x.expand(*expand_shape)),
-            ("transpose", lambda x: x.transpose(*T_shape)),
-            ("permute", lambda x: x.permute(*permute_shape)),
+            ("view1", lambda x: x.view(-1), True),
+            ("view4", lambda x: x.view(1, -1, 1), True),
+            ("view2", lambda x: x.view(*view_shape), True),
+            ("view3", lambda x: x.view(*view_shape2), True),
+            ("expand", lambda x: x.expand(*expand_shape), True),
+            ("transpose", lambda x: x.transpose(*T_shape), True),
+            ("permute", lambda x: x.permute(*permute_shape), True),
         ]
         shape = (3, 5, 7)
         T_shape = 2, 1
@@ -251,11 +232,10 @@ def test_views():
         expand_shape = 2, 3, 3, 5, 7
         view_shape = 5, 7, 3
         view_shape2 = 5, -1
-        for opname, func in ops:
-            a = (T.randn(*shape)+10).to(dtype)
-            func(from_torch(a))
+        for opname, func, check_grad in ops:
+            a = T.randn(*shape).to(dtype)
             print("** Test", opname)
-            check(func, (a,))
+            check(func, (a,), check_grad=check_grad)
 
 
 def test_matmul():
