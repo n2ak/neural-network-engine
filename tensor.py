@@ -1,13 +1,16 @@
 from __future__ import annotations
 import os
 import numpy as np
-from typing import Self, Optional, overload, TYPE_CHECKING
+from cuda.op_names import *
 from cuda import CUDA_KERNELS
 from cuda.alloc import CudaAllocator, Buffer
-from cuda.utils import promote_dtype, promote_uop_dtype, assert_cuda_error
-from cuda.op_names import *
+from cuda.utils import promote_dtype, promote_uop_dtype
+
 import grad as grad_ops
-from grad import differentiable_function, DifferentiableFunction, broadcast
+from grad import BackwardFn, differentiable, broadcast
+
+from typing import Self, Optional, overload, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from grad import ElemWiseBackwardFn, ElemWiseBackwardFnWrapper, UnaryOpBackwardFnWrapper, UnaryOpBackwardFn, ReduceOpBackwardFnWrapper, ReduceOpBackwardFn
 
@@ -99,22 +102,22 @@ class Tensor:
         CudaAllocator.free(self.data)
 
     @broadcast()
-    @differentiable_function(2)
+    @differentiable(2)
     def __add__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("add", self, other, backward_fn=grad_ops.add_backward)
 
     @broadcast()
-    @differentiable_function(2)
+    @differentiable(2)
     def __mul__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("mul", self, other, backward_fn=grad_ops.mul_backward)
 
     @broadcast()
-    @differentiable_function(2)
+    @differentiable(2)
     def __sub__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("sub", self, other, backward_fn=grad_ops.sub_backward)
 
     @broadcast()
-    @differentiable_function(2)
+    @differentiable(2)
     def __truediv__(self, other: Self | int | float):
         return CUDA_OPS.elem_op("div", self, other, backward_fn=grad_ops.truediv_backward, floating_op=True)
 
@@ -167,7 +170,7 @@ class Tensor:
         assert other == 2
         return self * self
 
-    @differentiable_function(1)
+    @differentiable(1)
     def exp(self):
         return CUDA_OPS.uop("exp", self, backward_fn=grad_ops.exp_backward)
 
@@ -175,18 +178,18 @@ class Tensor:
         # TODO add it to uops
         return Tensor.from_numpy(np.sqrt(self.numpy()))
 
-    @differentiable_function(1)
+    @differentiable(1)
     def log(self):
         return CUDA_OPS.uop("log", self, backward_fn=grad_ops.log_backward)
 
-    @differentiable_function(1)
+    @differentiable(1)
     def log2(self):
         return CUDA_OPS.uop("log2", self, backward_fn=grad_ops.log2_backward)
 
     def max(self, axis: int | tuple[int, ...] = (), keepdim=False):
         return CUDA_OPS.reduce_op("max", self,  axis=axis, keepdim=keepdim)
 
-    @differentiable_function(1)
+    @differentiable(1)
     def sum(self, axis: int | tuple[int, ...] = (), keepdim=False):
         out_dtype = self.dtype
         if self.dtype == np.int32:
@@ -218,7 +221,7 @@ class Tensor:
             *dims
         )
 
-    @differentiable_function(1)
+    @differentiable(1)
     def permute(self, *dims: int):
         # TODO: add support for negative dims
         new_stride = [self.stride[d] for d in dims]
@@ -272,7 +275,7 @@ class Tensor:
             return self, other.expand(*expected_shape)
         return self.expand(*expected_shape), other.expand(*expected_shape)
 
-    @differentiable_function(1)
+    @differentiable(1)
     def expand(self, *dims: int):
         if self.shape == dims:
             # this might be a problem
@@ -309,7 +312,7 @@ class Tensor:
 
         return self._as_view(new_shape, expected_stride), backward
 
-    @differentiable_function(1)
+    @differentiable(1)
     def view(self, *dims: int):
         if self.shape != dims:
             assert self.is_contiguous
@@ -343,7 +346,7 @@ class Tensor:
                 shape, stride, offset=ptr_offset, slice=slice),  # type: ignore
         )
 
-    @differentiable_function(2)
+    @differentiable(2)
     def __matmul__(self, other: Self):
         return CUDA_OPS.matmul(self, other)
 
@@ -438,12 +441,12 @@ class Tensor:
             assert isinstance(fn, list)
             for bfn in reversed(fn):
                 assert isinstance(
-                    bfn, (DifferentiableFunction, grad_ops.InplaceBackwardFn)), type(bfn)
+                    bfn, (BackwardFn, grad_ops.InplaceBackwardFn)), type(bfn)
                 grad = bfn.backward(grad)
         else:
             self.grad = grad
 
-    def _set_backward_fn(self, func: DifferentiableFunction | grad_ops.InplaceBackwardFn):
+    def _set_backward_fn(self, func: BackwardFn | grad_ops.InplaceBackwardFn):
         if not hasattr(self, "_backward"):
             self._backward = []
         self._backward.append(func)

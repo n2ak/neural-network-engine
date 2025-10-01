@@ -2,7 +2,7 @@ import numpy as np
 from typing import Generic, Type, TypeVar, Any, Generator
 from abc import ABC, abstractmethod
 from tensor import Tensor
-from grad import differentiable_function
+from grad import differentiable
 
 T = TypeVar("T")
 
@@ -108,7 +108,7 @@ class ReLU(Module[Tensor]):
         return x
 
 
-@differentiable_function(1)
+@differentiable(1)
 def cross_entropy(input: Tensor, target: Tensor, dim=-1):
     assert input.ndim == 2
     assert target.ndim == 1
@@ -131,8 +131,8 @@ def negative_log_likelihood(tinput: Tensor, ttarget: Tensor):
     # we don't support selecting with lists yet! (input[list1,list2,...])
     input = tinput.numpy()
     target = ttarget.numpy()
-    assert (np.all(input <= 0),
-            f"Not all elements are negative, has NaNs: {np.any(np.isnan(input))}, max: {input.max()}")
+    assert np.all(input <= 0), (
+        f"Not all elements are negative, has NaNs: {np.any(np.isnan(input))}, max: {input.max()}")
     indices = target.astype(int)
     assert input.shape[0] == target.shape[0], "Input and target should have same batch size."
 

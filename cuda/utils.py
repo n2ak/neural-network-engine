@@ -1,8 +1,7 @@
 
-import ctypes
-import subprocess
 import os
 import tempfile
+import subprocess
 import numpy as np
 
 
@@ -27,11 +26,10 @@ def compile_cuda_code(code: str, lib_name="libtemp.so"):
 
 
 def get_cuda_code():
-    from ._other_ops import register_other_ops, other_ops_source_code
-    from ._bin_ops import define_matmul
-    from ._unary_ops import unary_ops_source_code, register_uops
-    from ._reduce_ops import reduction_ops_source_code, register_reduce_ops
-    from ._elemwsie_ops import element_wise_source_code, register_elemwise_ops
+    from ._other_ops import other_ops_source_code
+    from ._unary_ops import unary_ops_source_code
+    from ._reduce_ops import reduction_ops_source_code
+    from ._elemwsie_ops import element_wise_source_code
 
     code = "\n".join([
         read_cuda_source(),

@@ -1,5 +1,3 @@
-
-import ctypes
 from ctypes import c_int, c_void_p, POINTER
 from .utils import _int_1d_array
 

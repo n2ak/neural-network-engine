@@ -1,6 +1,4 @@
 
-import ctypes
-import numpy as np
 from ctypes import c_int, c_void_p
 from .utils import _int_1d_array, promote_uop_dtype
 

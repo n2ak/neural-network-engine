@@ -39,7 +39,7 @@ class Grad:
         return False
 
 
-class DifferentiableFunction():
+class BackwardFn():
     def __init__(
         self,
         function: Func,
@@ -81,7 +81,7 @@ class DifferentiableFunction():
         # the chain rule
         from tensor import Tensor
         indent += 1
-        # print("\t"*indent, "Chain rule", self.name)
+
         with Grad.on(False):
             gradients = self._backward_fn(incoming_grad)
             assert len(
@@ -93,11 +93,10 @@ class DifferentiableFunction():
                 if isinstance(input, Tensor) and input.requires_grad:
                     assert gradient.dtype in [
                         np.float32, np.float64], f"Expected {i+1}th gradient to be a    float instead of {gradient.dtype}"
-                    # input.grad = gradient
-                    # print("\t"*indent, "Passing gradient to", input)
+
                     input.backward(gradient)
         indent -= 1
-        return gradient
+        return gradient  # type: ignore
 
 
 class InplaceBackwardFn:
@@ -128,14 +127,14 @@ def broadcast(second_only=False):
     return decorator
 
 
-def differentiable_function(number_of_args: int):
+def differentiable(number_of_args: int):
     import functools
 
     def register(func: Func):
 
         @functools.wraps(func)
         def a(*args, **kwargs):
-            dfunc = DifferentiableFunction(func, func.__name__, number_of_args)
+            dfunc = BackwardFn(func, func.__name__, number_of_args)
             return dfunc(*args, **kwargs)
         return a
     return register

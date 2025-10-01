@@ -1,11 +1,10 @@
 
-
-import ctypes
 import numpy as np
-from ctypes import c_int, c_void_p, POINTER, c_size_t, byref
-from .utils import assert_cuda_error
 from typing import Optional
+from ctypes import c_int, c_void_p, POINTER, c_size_t, byref
+
 from . import Binary
+from .utils import assert_cuda_error
 
 
 # for the compiling and running? runtimes to be the same
