@@ -36,6 +36,21 @@ def check(
          for inp in inputs_tensors],
         "Result type:", a2.dtype
     )
+    check_tensor(
+        inputs_torch,
+        inputs_tensors,
+        a1, a2,
+        rtol=rtol, atol=atol, check_grad=check_grad
+    )
+
+
+def check_tensor(
+    inputs_torch: tuple[torch.Tensor | int, ...],
+    inputs_tensors: tuple[Tensor | int, ...],
+    a1: torch.Tensor,
+    a2: Tensor,
+    rtol=1e-05, atol=1e-08, check_grad=False,
+):
     if check_grad:
         a1.backward(torch.ones_like(a1))
         a2.backward(Tensor.from_numpy(np.ones(a2.shape, dtype=a2.dtype)))
@@ -48,7 +63,7 @@ def check(
     a1_numpy = a1.numpy(force=True) if isinstance(a1, torch.Tensor)else a1
     a2_numpy = a2.numpy()
 
-    check_result(a1_numpy, a2_numpy, rtol=rtol, atol=atol)
+    check_numpy(a1_numpy, a2_numpy, rtol=rtol, atol=atol)
 
     if check_grad:
         for i, t1, t2 in zip(range(len(inputs_torch)), inputs_torch, inputs_tensors):
@@ -60,11 +75,11 @@ def check(
             assert t2.requires_grad
 
             print(f"Checking tensor {i+1}", t2)
-            check_result(t1.grad.numpy(), t2.grad.numpy(), check_dtype=False)
+            check_numpy(t1.grad.numpy(), t2.grad.numpy(), check_dtype=False)
 
 
-def check_result(a1_numpy: np.ndarray, a2_numpy: np.ndarray, rtol=1e-05,
-                 atol=1e-08, check_dtype=True):
+def check_numpy(a1_numpy: np.ndarray, a2_numpy: np.ndarray, rtol=1e-05,
+                atol=1e-08, check_dtype=True):
     # if contiguous:
     #     a1_numpy = np.ascontiguousarray(a1_numpy)
     #     a2_numpy = np.ascontiguousarray(a2_numpy)

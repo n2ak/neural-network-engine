@@ -1,6 +1,6 @@
 import numpy as np
 import torch as T
-from _test_utils import check, from_torch, from_numpy, check_result
+from _test_utils import check, from_torch, from_numpy, check_numpy
 
 
 def test_elemwise_ops():
@@ -91,7 +91,7 @@ def test_slicing():
             a2 = from_numpy(a1)
             print("** Test", i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check_result(a1[slices], a2[slices].numpy())
+            check_numpy(a1[slices], a2[slices].numpy())
 
 
 def test_nested_slicing():
@@ -111,7 +111,7 @@ def test_nested_slicing():
             a2 = from_numpy(a1)
             print("** Test", i+1, dtype)
             # contiguous=True tensor.numpy() returns a contiguous
-            check_result(a1[1:, :3, 2][slices], a2[1:, :3, 2][slices].numpy())
+            check_numpy(a1[1:, :3, 2][slices], a2[1:, :3, 2][slices].numpy())
 
 
 def test_view_offset():
