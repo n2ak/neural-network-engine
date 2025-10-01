@@ -1,7 +1,7 @@
 
 import ctypes
 from ctypes import c_int, c_void_p
-from .utils import _define_func, _int_1d_array, promote_dtype
+from .utils import _int_1d_array, promote_dtype
 
 
 ELEMWISE_OPS = [
@@ -20,17 +20,18 @@ def elemwise_op_name(name, in_dtype, in_dtype2, out_dtype):
     return f"elemwise_{name}_{in_dtype}_{in_dtype2}_{out_dtype}"
 
 
-def define_elemwise_op(lib: ctypes.CDLL, name: str):
-    return _define_func(lib[name], [
+def define_elemwise_op(name: str):
+    from . import CUDA_KERNELS
+    CUDA_KERNELS.define_function(name, [
         c_void_p, _int_1d_array(),  # a
         c_void_p, _int_1d_array(),  # b
         c_void_p, _int_1d_array(),  # output
         _int_1d_array(),  # shape
         c_int,
-    ], None)
+    ])
 
 
-def register_elemwise_ops(lib: ctypes.CDLL, ops: dict):
+def register_elemwise_ops():
     for name, floating_op, *dtypes in ELEMWISE_OPS:
         for in_dtype1 in dtypes:
             for in_dtype2 in dtypes:
@@ -39,9 +40,9 @@ def register_elemwise_ops(lib: ctypes.CDLL, ops: dict):
                 else:
                     out_dtype = promote_dtype(
                         in_dtype1, in_dtype2, floating_op)
-                opname = elemwise_op_name(
-                    name, in_dtype1, in_dtype2, out_dtype)
-                ops[opname] = define_elemwise_op(lib, opname)
+                define_elemwise_op(
+                    elemwise_op_name(name, in_dtype1, in_dtype2, out_dtype)
+                )
 
 
 def elemwise_code(name: str, floating_op: bool, *dtypes: str):

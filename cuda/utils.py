@@ -1,15 +1,50 @@
 
+import ctypes
+import subprocess
+import os
+import tempfile
 import numpy as np
+
+
+def compile_cuda_code(code: str, lib_name="libtemp.so"):
+    nvcc_path = os.getenv("NVCC_PATH", "/usr/local/cuda-12.8/bin/nvcc")
+    assert os.path.exists(nvcc_path), "NVCC not found"
+
+    with tempfile.TemporaryDirectory(delete=False) as tmpdir:
+        cu_path = os.path.join(tmpdir, "kernel.cu")
+        so_path = os.path.join(tmpdir, lib_name)
+        with open(cu_path, "w") as f:
+            f.write(code)
+        cmd = [
+            nvcc_path, "-shared", "-Xcompiler", "-fPIC", cu_path,
+            "-o", so_path,
+            "-lcudart",
+            "--expt-relaxed-constexpr",  # for host constexpr to be used is device
+            "-arch=sm_86",
+        ]
+        subprocess.check_call(cmd)
+    return so_path
+
+
+def get_cuda_code():
+    from ._other_ops import register_other_ops, other_ops_source_code
+    from ._bin_ops import define_matmul
+    from ._unary_ops import unary_ops_source_code, register_uops
+    from ._reduce_ops import reduction_ops_source_code, register_reduce_ops
+    from ._elemwsie_ops import element_wise_source_code, register_elemwise_ops
+
+    code = "\n".join([
+        read_cuda_source(),
+        reduction_ops_source_code(),
+        element_wise_source_code(),
+        unary_ops_source_code(),
+        other_ops_source_code(),
+    ])
+    return code
 
 
 def _int_1d_array():
     return np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags="C_CONTIGUOUS")
-
-
-def _define_func(func, types, ret=None):
-    func.argtypes = types
-    func.restype = ret
-    return func
 
 
 def assert_cuda_error(err):

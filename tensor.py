@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import numpy as np
 from typing import Self, Optional, overload, TYPE_CHECKING
-from cuda import _cuda_ops
+from cuda import CUDA_KERNELS
 from cuda.alloc import CudaAllocator, Buffer
 from cuda.utils import promote_dtype, promote_uop_dtype, assert_cuda_error
 from cuda.op_names import *
@@ -489,8 +489,6 @@ def clip(x, _min, _max):
 
 
 class CUDA_OPS:
-    _kernels = _cuda_ops
-
     @overload
     @classmethod
     def elem_op(
@@ -525,8 +523,8 @@ class CUDA_OPS:
         else:
             out_dtype = out.dtype
 
-        kernel = cls._kernels[elemwise_op_name(
-            op_name, a.dtype, b.dtype, out_dtype)]
+        kernel = CUDA_KERNELS.get(elemwise_op_name(
+            op_name, a.dtype, b.dtype, out_dtype))
 
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
@@ -540,7 +538,7 @@ class CUDA_OPS:
         b_stride = np.array(b.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
 
-        kernel(
+        kernel.launch(
             a.data.ptr, a_stride,  # type: ignore
             b.data.ptr, b_stride,  # type: ignore
             c.data.ptr, c_stride,  # type: ignore
@@ -574,13 +572,13 @@ class CUDA_OPS:
     ):
         out_dtype = promote_uop_dtype(a.dtype, floating_op)
         c = Tensor.empty(a.shape, dtype=out_dtype)
-        kernel = cls._kernels[uop_name(op_name, a.dtype, out_dtype)]
+        kernel = CUDA_KERNELS.get(uop_name(op_name, a.dtype, out_dtype))
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
 
         a_stride = np.array(a.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
-        kernel(
+        kernel.launch(
             a.data.ptr, a_stride,  # type: ignore
             c.data.ptr, c_stride,  # type: ignore
             shape,
@@ -615,10 +613,10 @@ class CUDA_OPS:
 
         if axis == () and (os.getenv("USE_REDUCTION", "1") != "0"):
             # this is order of 1000s faster
-            kernel = cls._kernels[reduction_op_name(
-                op_name, str(a.dtype), str(out_dtype))]
+            kernel = CUDA_KERNELS.get(reduction_op_name(
+                op_name, str(a.dtype), str(out_dtype)))
             out = Tensor.empty((), dtype=out_dtype)
-            kernel(
+            kernel.launch(
                 a.data.ptr,  # type: ignore
                 out.data.ptr,  # type: ignore
                 a.size
@@ -640,8 +638,8 @@ class CUDA_OPS:
                     i += 1
             return shape
 
-        kernel = cls._kernels[reduceop_name(
-            op_name, str(a.dtype), str(out_dtype))]
+        kernel = CUDA_KERNELS.get(reduceop_name(
+            op_name, str(a.dtype), str(out_dtype)))
         c = Tensor.empty(
             get_shape(list(a.shape), keepdim=False), dtype=out_dtype)
 
@@ -650,7 +648,7 @@ class CUDA_OPS:
         a_stride = np.array(a.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
 
-        kernel(
+        kernel.launch(
             a.data.ptr, a_stride, a_shape,  # type: ignore
             c.data.ptr, c_stride, c_shape,  # type: ignore
             np.array(axis, dtype=np.int32),
@@ -711,8 +709,8 @@ class CUDA_OPS:
             )
             out_stride = out.stride
 
-        kernel = cls._kernels["matmul_batched"]
-        kernel(
+        kernel = CUDA_KERNELS.get("matmul_batched")
+        kernel.launch(
             a.data.ptr,  # type: ignore
             b.data.ptr,  # type: ignore
             out.data.ptr,  # type: ignore
@@ -726,13 +724,13 @@ class CUDA_OPS:
     @classmethod
     def copy_out(cls, src: Tensor, dst: Tensor):
         kernel_name = f"copy_out_{src.dtype}_{dst.dtype}"
-        kernel = cls._kernels[kernel_name]
+        kernel = CUDA_KERNELS.get(kernel_name)
 
         src_shape = np.array(src.shape, dtype=np.int32)
         src_stride = np.array(src.stride, dtype=np.int32)
         assert dst.is_contiguous
 
-        kernel(
+        kernel.launch(
             src.data.ptr, src_shape, src_stride,  # type: ignore
             dst.data.ptr,  # type: ignore
             src.ndim,
@@ -745,7 +743,7 @@ class CUDA_OPS:
         # TODO: maybe we need offset ?
         dst_shape = tuple(len(i) if i.ndim != 0 else 1 for i in indices)
         kernel_name = f"copy_out_indices_{src.dtype}"
-        kernel = cls._kernels[kernel_name]
+        kernel = CUDA_KERNELS.get(kernel_name)
 
         dst = Tensor.empty(dst_shape, dtype=src.dtype)
 
@@ -769,7 +767,7 @@ class CUDA_OPS:
 
         indices_ptr = ctypes.cast(indices_arr, ctypes.POINTER(ctypes.c_void_p))
 
-        kernel(
+        kernel.launch(
             src.data.ptr, src_shape, src_stride,  # type: ignore
             dst.data.ptr, indices_ptr, dst_shape,  # type: ignore
             src.ndim,
@@ -780,7 +778,7 @@ class CUDA_OPS:
     @classmethod
     def copy_to(cls, data: Buffer, dst: Tensor):
         kernel_name = f"copy_out_{dst.dtype}"
-        kernel = cls._kernels[kernel_name]
+        kernel = CUDA_KERNELS.get(kernel_name)
 
         src_shape = np.array(data.shape, dtype=np.int32)
         src_stride = np.array(data.stride, dtype=np.int32)
@@ -788,7 +786,7 @@ class CUDA_OPS:
         # dst_shape = np.array(dst.shape, dtype=np.int32)
         # dst_stride = np.array(dst.stride, dtype=np.int32)
 
-        kernel(
+        kernel.launch(
             data.ptr, src_shape, src_stride,  # type: ignore
             dst.data.ptr,   # type: ignore
             dst.ndim,
@@ -808,14 +806,14 @@ class CUDA_OPS:
         assert value.shape == t.shape
 
         kernel_name = setitem_op_name(t.dtype)
-        kernel = cls._kernels[kernel_name]
+        kernel = CUDA_KERNELS.get(kernel_name)
 
         value_stride = np.array(value.stride, dtype=np.int32)
 
         t_shape = np.array(t.shape, dtype=np.int32)
         t_stride = np.array(t.stride, dtype=np.int32)
 
-        kernel(
+        kernel.launch(
             value.data.ptr, value_stride,  # type: ignore
             condition.data.ptr,   # type: ignore
             t.data.ptr, t_shape, t_stride,

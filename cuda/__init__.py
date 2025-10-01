@@ -1,60 +1,64 @@
-
-import os
 import ctypes
-import tempfile
-import subprocess
-
-
-from ._other_ops import register_other_ops, other_ops_source_code
+from .utils import compile_cuda_code, get_cuda_code
+from ._other_ops import register_other_ops
 from ._bin_ops import define_matmul
-from ._unary_ops import unary_ops_source_code, register_uops
-from ._reduce_ops import reduction_ops_source_code, register_reduce_ops
-from ._elemwsie_ops import element_wise_source_code, register_elemwise_ops
-
-from .utils import read_cuda_source
-
-nvcc_path = os.getenv("NVCC_PATH", "/usr/local/cuda-12.8/bin/nvcc")
-assert os.path.exists(nvcc_path), "NVCC not found"
+from ._unary_ops import register_uops
+from ._reduce_ops import register_reduce_ops
+from ._elemwsie_ops import register_elemwise_ops
 
 
-def get_cuda_code():
-    code = "\n".join([
-        read_cuda_source(),
-        reduction_ops_source_code(),
-        element_wise_source_code(),
-        unary_ops_source_code(),
-        other_ops_source_code(),
-    ])
-    return code
+class Binary:
+    def __init__(self, path: str) -> None:
+        self.bin = ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+        self.functions: dict[str, CFunction] = {}
+
+    def define_function(self, name: str, args: list, return_type=None):
+        kernel = CFunction(
+            self.bin,
+            name,
+            args,
+            return_type
+        )
+        self.functions[name] = kernel
+        return kernel
+
+    def get(self, name: str):
+        return self.functions[name]
 
 
-def compile_cuda_code(code: str, lib_name="libtemp.so"):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        cu_path = os.path.join(tmpdir, "kernel.cu")
-        so_path = os.path.join(tmpdir, lib_name)
-        with open(cu_path, "w") as f:
-            f.write(code)
-        cmd = [
-            nvcc_path, "-shared", "-Xcompiler", "-fPIC", cu_path,
-            "-o", so_path,
-            "-lcudart",
-            "--expt-relaxed-constexpr",  # for host constexpr to be used is device
-            "-arch=sm_86",
-        ]
-        subprocess.check_call(cmd)
-        lib = ctypes.CDLL(so_path, mode=ctypes.RTLD_GLOBAL)
-    return lib
+class CFunction:
+    def __init__(self, lib: ctypes.CDLL, name: str, args: list, return_type) -> None:
+        def _define_func(name: str, types, ret=None):
+            func = lib[name]
+            func.argtypes = types
+            func.restype = ret
+            return func
+        self.expected_n_args = len(args)
+        self.name = name
+        self.return_type = return_type
+        self._kernel = _define_func(
+            name,
+            args,
+            return_type
+        )
+
+    def launch(self, *args):
+        assert len(
+            args) == self.expected_n_args, f"CFunction {self.name} expects {self.expected_n_args} arguments but {len(args)} were given."
+        return self._kernel(*args)
+
+    call = launch
 
 
-def compile():
-    lib = compile_cuda_code(get_cuda_code(), "cuda_code")
-    ops = {}
-    register_elemwise_ops(lib, ops)
-    register_uops(lib, ops)
-    register_reduce_ops(lib, ops)
-    ops["matmul_batched"] = define_matmul(lib)
-    register_other_ops(lib, ops)
-    return ops
+CUDA_KERNELS = Binary(compile_cuda_code(get_cuda_code(), "cuda_code"))
 
 
-_cuda_ops = compile()
+def register():
+    register_elemwise_ops()
+    register_uops()
+    register_reduce_ops()
+    define_matmul()
+    register_other_ops()
+
+
+register()

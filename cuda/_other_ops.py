@@ -1,7 +1,7 @@
 
 import ctypes
 from ctypes import c_int, c_void_p, POINTER
-from .utils import _define_func, _int_1d_array, promote_dtype
+from .utils import _int_1d_array
 
 
 SETITEM_DTYPES = [
@@ -13,8 +13,9 @@ def setitem_op_name(dtype):
     return f"setitem_{dtype}"
 
 
-def define_setitem_op(lib: ctypes.CDLL, name: str):
-    return _define_func(lib[name], [
+def define_setitem_op(name: str):
+    from . import CUDA_KERNELS
+    CUDA_KERNELS.define_function(name, [
         c_void_p, _int_1d_array(),  # values, stride
         c_void_p,  # condition
         c_void_p, _int_1d_array(), _int_1d_array(),  # out,shape,stride
@@ -53,37 +54,39 @@ def setitem_source_code():
     return "\n\n".join(map(lambda v: setitem_code(v), SETITEM_DTYPES))
 
 
-def register_other_ops(lib: ctypes.CDLL, ops: dict):
+def register_other_ops():
     for dtype in SETITEM_DTYPES:
         opname = setitem_op_name(dtype)
-        ops[opname] = define_setitem_op(lib, opname)
+        define_setitem_op(opname)
 
-    define_copyout(lib, ops)
-    define_copyout_indices(lib, ops)
+    define_copyout()
+    define_copyout_indices()
 
 
-def define_copyout(lib, ops):
+def define_copyout():
+    from . import CUDA_KERNELS
     for in_dtype in ["float32", "float64", "int32", "int64"]:
         for out_dtype in ["float32", "float64", "int32", "int64"]:
             name = f"copy_out_{in_dtype}_{out_dtype}"
-            ops[name] = _define_func(lib[name], [
+            CUDA_KERNELS.define_function(name, [
                 c_void_p,  _int_1d_array(), _int_1d_array(),
                 c_void_p,
                 c_int,
-            ], None)
+            ])
 
 
-def define_copyout_indices(lib, ops):
+def define_copyout_indices():
+    from . import CUDA_KERNELS
     for dtype in ["float32", "float64", "int32", "int64"]:
         name = f"copy_out_indices_{dtype}"
-        ops[name] = _define_func(lib[name], [
+        CUDA_KERNELS.define_function(name, [
             # const T * d_A, const int * shape_A, const int * stride_A,
             c_void_p,  _int_1d_array(), _int_1d_array(),
             # T * d_C, const int ** indices, const int * shape_C,
             c_void_p, POINTER(c_void_p), _int_1d_array(),
             # int ndim_A
             c_int,
-        ], None)
+        ])
 
 
 def get_copyout_code():

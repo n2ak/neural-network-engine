@@ -3,12 +3,13 @@
 import ctypes
 import numpy as np
 from ctypes import c_int, c_void_p, POINTER, c_size_t, byref
-from .utils import _define_func, assert_cuda_error
+from .utils import assert_cuda_error
 from typing import Optional
+from . import Binary
 
 
 # for the compiling and running? runtimes to be the same
-_cuda = ctypes.CDLL("libcudart.so", mode=ctypes.RTLD_GLOBAL)
+_CUDA = Binary("libcudart.so")
 
 
 class Buffer:
@@ -40,8 +41,9 @@ class Buffer:
     @classmethod
     def new(cls, shape: tuple[int, ...], stride: tuple[int, ...], dtype: np.typing.DTypeLike):
         ptr = c_void_p()
-        assert_cuda_error(CudaAllocator.alloc(
-            byref(ptr), get_nbytes(shape, stride, dtype)))
+        assert_cuda_error(CudaAllocator.alloc.call(
+            byref(ptr), get_nbytes(shape, stride, dtype))
+        )
         buff = Buffer(
             ptr,
             shape=shape,
@@ -55,7 +57,7 @@ class Buffer:
             return
         self.refcount -= 1
         if self.refcount <= 0:
-            CudaAllocator._free(self.ptr)
+            CudaAllocator._free.call(self.ptr)
             CudaAllocator.mem -= self.nbytes
 
     def _as_view(self, shape, stride, offset, slice):  # offset in items
@@ -97,13 +99,26 @@ class Buffer:
 class CudaAllocator:
     _cudaMemcpyHostToDevice = 1
     _cudaMemcpyDeviceToHost = 2
-    alloc = _define_func(_cuda.cudaMalloc, [
-                         POINTER(c_void_p), c_size_t], c_int)
-    _free = _define_func(_cuda.cudaFree, [c_void_p], c_int)
-    memcpy = _define_func(
-        _cuda.cudaMemcpy, [c_void_p, c_void_p, c_size_t, c_int], c_int)
-    get_last_error = _define_func(_cuda.cudaGetLastError, [], c_int)
-    _sync = _define_func(_cuda.cudaDeviceSynchronize, [], c_int)
+    alloc = _CUDA.define_function(
+        "cudaMalloc",
+        [POINTER(c_void_p), c_size_t], c_int
+    )
+    _free = _CUDA.define_function("cudaFree", [c_void_p], c_int)
+    memcpy = _CUDA.define_function(
+        "cudaMemcpy",
+        [c_void_p, c_void_p, c_size_t, c_int],
+        c_int
+    )
+    get_last_error = _CUDA.define_function(
+        "cudaGetLastError",
+        [],
+        c_int
+    )
+    sync = _CUDA.define_function(
+        "cudaDeviceSynchronize",
+        [],
+        c_int
+    )
 
     mem = 0
 
@@ -118,7 +133,7 @@ class CudaAllocator:
     def to_cuda(cls, host_array: np.typing.NDArray):
         buffer = cls.alloc_empty(host_array.shape, [
                                  s//host_array.itemsize for s in host_array.strides], host_array.dtype)
-        err = cls.memcpy(
+        err = cls.memcpy.call(
             buffer.ptr,
             host_array.ctypes.data_as(c_void_p),
             host_array.nbytes,
@@ -138,7 +153,7 @@ class CudaAllocator:
 
         # TODO: do this only if not contiguous
         cls.synchronize()
-        assert_cuda_error(cls.memcpy(
+        assert_cuda_error(cls.memcpy.call(
             arr.ctypes.data_as(c_void_p),
             buffer.ptr,
             buffer.nbytes,
@@ -155,8 +170,8 @@ class CudaAllocator:
 
     @classmethod
     def synchronize(cls,):
-        assert_cuda_error(cls.get_last_error())
-        assert_cuda_error(cls._sync())
+        assert_cuda_error(cls.get_last_error.call())
+        assert_cuda_error(cls.sync.call())
 
     @classmethod
     def free(cls, buffer: Buffer):
