@@ -415,12 +415,18 @@ class Tensor:
 
         if (fn := getattr(self, "_backward", None)) is not None:
             # assert isinstance(fn, DifferentiableFunction), type(fn)
-            fn.backward(grad)
+            assert isinstance(fn, list)
+            for bfn in reversed(fn):
+                assert isinstance(
+                    bfn, (DifferentiableFunction, grad_ops.InplaceBackwardFn)), type(bfn)
+                grad = bfn.backward(grad)
         else:
             self.grad = grad
 
-    def _set_backward_fn(self, func: DifferentiableFunction):
-        self._backward = func
+    def _set_backward_fn(self, func: DifferentiableFunction | grad_ops.InplaceBackwardFn):
+        if not hasattr(self, "_backward"):
+            self._backward = []
+        self._backward.append(func)
 
     @property
     def grad(self):
@@ -785,3 +791,13 @@ class CUDA_OPS:
             t.data.ptr, t_shape, t_stride,
             t.ndim
         )
+        if t.requires_grad and grad_ops.Grad.is_on():
+            def backward(gradient: Tensor):
+                cls.setitem_op(
+                    gradient,
+                    # TODO why not negation of condition?
+                    condition,
+                    0
+                )
+                return gradient
+            t._set_backward_fn(grad_ops.InplaceBackwardFn(backward, t))

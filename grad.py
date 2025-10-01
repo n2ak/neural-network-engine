@@ -97,6 +97,19 @@ class DifferentiableFunction():
                     # print("\t"*indent, "Passing gradient to", input)
                     input.backward(gradient)
         indent -= 1
+        return gradient
+
+
+class InplaceBackwardFn:
+    # for inplce operations
+    def __init__(self, backward_fn: Callable[[Tensor], Tensor], input: Tensor) -> None:
+        self._backward_fn = backward_fn
+        self.input = input
+
+    def backward(self, incoming_grad: Tensor):
+        gradient = self._backward_fn(incoming_grad)
+        assert gradient.shape == self.input.shape
+        return gradient
 
 
 indent = 0

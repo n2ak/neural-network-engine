@@ -260,7 +260,9 @@ def test_complex():
         b_shape = (5, 1, 9)
 
         def func(a, b):
-            return (((a*b)+10) / 12.0).mean()
+            c = (a*b)+10
+            c[c < 1] = 29
+            return (c / 12.0).mean()
 
         a = T.randn(*a_shape).to(dtype)
         b = T.randn(*b_shape).to(dtype)
@@ -269,9 +271,10 @@ def test_complex():
 
 def test_other_ops():
     def relu(a):
+        a = a+0
         a[a < 0] = 0
         return a
     for func in [relu]:
         T.manual_seed(0)
         a = T.randn(3, 5, 7)
-        check(func, (a,))
+        check(func, (a,), check_grad=True)
