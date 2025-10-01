@@ -4,7 +4,7 @@ from .utils import _define_func, _int_1d_array
 
 
 def define_matmul(lib):
-    return _define_func(lib["matmul_3D_2d"], [
+    return _define_func(lib["matmul_batched"], [
         c_void_p,  # A
         c_void_p,  # B
         c_void_p,  # C

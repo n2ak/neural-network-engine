@@ -239,14 +239,19 @@ def test_views():
 
 
 def test_matmul():
+    print()
     T.manual_seed(0)
-    a = T.randn(3, 5, 7)
-    b = T.randn(7, 9)
 
     def func(a, b):
         return a @ b
 
-    check(func, (a, b))
+    for a, b in [
+        (T.randn(3, 5, 7), T.randn(7, 9)),
+        (T.randn(3, 5, 7), T.randn(3, 7, 9)),
+        (T.randn(5, 7), T.randn(3, 7, 9)),
+    ]:
+        print("** Test", "matmul", a.shape, "@", b.shape)
+        check(func, (a, b), check_grad=True)
 
 
 def test_complex():

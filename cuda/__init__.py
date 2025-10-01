@@ -52,7 +52,7 @@ def compile():
     register_elemwise_ops(lib, ops)
     register_uops(lib, ops)
     register_reduce_ops(lib, ops)
-    ops["matmul_3D_2d"] = define_matmul(lib)
+    ops["matmul_batched"] = define_matmul(lib)
     define_copyout(lib, ops)
     register_other_ops(lib, ops)
     return ops

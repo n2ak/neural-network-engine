@@ -203,6 +203,7 @@ class Tensor:
 
     @differentiable_function(1)
     def permute(self, *dims: int):
+        # TODO: add support for negative dims
         new_stride = [self.stride[d] for d in dims]
         new_shape = [self.shape[d] for d in dims]
         out = self._as_view(new_shape, new_stride)
@@ -322,6 +323,7 @@ class Tensor:
                 shape, stride, offset=ptr_offset, slice=slice),  # type: ignore
         )
 
+    @differentiable_function(2)
     def __matmul__(self, other: Self):
         return CUDA_OPS.matmul(self, other)
 
@@ -626,40 +628,62 @@ class CUDA_OPS:
     @classmethod
     def matmul(cls, a: Tensor, b: Tensor):
         assert a.ndim in [2, 3]
-        assert b.ndim == 2
-        assert a.shape[-1] == b.shape[0]
+        assert b.ndim in [2, 3]
         assert a.dtype == b.dtype == np.float32
 
-        K, N = b.shape
-        if a.ndim == 3:
-            BATCH, M, K = a.shape
-            out = Tensor.empty(
-                (BATCH, M, N),
-                dtype=np.float32
-            )
-            a_stride = a.stride
-            out_stride = out.stride
+        if b.ndim == 2:
+            assert a.shape[-1] == b.shape[0]
         else:
+            assert a.shape[-1] == b.shape[1]
+
+        if a.ndim == 2 and b.ndim == 2:
+            # both 2d
             BATCH = 1
             M, K = a.shape
+            K, N = b.shape
             out = Tensor.empty(
                 (M, N),
                 dtype=np.float32
             )
             a_stride = [0] + list(a.stride)
+            b_stride = [0] + list(b.stride)
             out_stride = [0] + list(out.stride)
+        else:
+            a_stride = a.stride
+            b_stride = b.stride
+            if b.ndim == 2:
+                # a 3d b 2d
+                BATCH, M, K = a.shape
+                K, N = b.shape
+                b_stride = [0] + list(b.stride)
+            elif a.ndim == 2:
+                # a 2d b 3d
+                M, K = a.shape
+                BATCH, K, N = b.shape
+                a_stride = [0] + list(a.stride)
+            else:
+                # both 3d
+                assert a.shape[0] == b.shape[0]
+                BATCH, M, K = a.shape
+                BATCH, K, N = b.shape
 
-        kernel = cls._kernels["matmul_3D_2d"]
+            out = Tensor.empty(
+                (BATCH, M, N),
+                dtype=np.float32
+            )
+            out_stride = out.stride
+
+        kernel = cls._kernels["matmul_batched"]
         kernel(
             a.data.ptr,  # type: ignore
             b.data.ptr,  # type: ignore
             out.data.ptr,  # type: ignore
             np.array(a_stride, dtype=np.int32),
-            np.array(b.stride, dtype=np.int32),
+            np.array(b_stride, dtype=np.int32),
             np.array(out_stride, dtype=np.int32),
             BATCH, M, K, N,
         )
-        return out
+        return out, grad_ops.matmul_backward(a, b)
 
     @classmethod
     def copy_out(cls, src: Tensor, dst: Tensor):

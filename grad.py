@@ -185,3 +185,15 @@ def sum_backward(x: Tensor, res: Tensor, axis: tuple[int, ...], keepdim: bool) -
             gradient_shape = x.shape
         return gradient.expand(*gradient_shape),
     return backward
+
+
+def matmul_backward(x, y):
+
+    def backward(gradient: Tensor):
+        dx, dy = gradient @ y.transpose(-2, -1), x.transpose(-1, -2) @ gradient
+        if dx.ndim != x.ndim:
+            dx = dx.sum(0)
+        if dy.ndim != y.ndim:
+            dy = dy.sum(0)
+        return dx, dy
+    return backward
