@@ -638,9 +638,9 @@ class CUDA_OPS:
         assert a.dtype == b.dtype == np.float32
 
         if b.ndim == 2:
-            assert a.shape[-1] == b.shape[0]
+            assert a.shape[-1] == b.shape[0], f"{a.shape} @ {b.shape}"
         else:
-            assert a.shape[-1] == b.shape[1]
+            assert a.shape[-1] == b.shape[1], f"{a.shape} @ {b.shape}"
 
         if a.ndim == 2 and b.ndim == 2:
             # both 2d
@@ -669,7 +669,7 @@ class CUDA_OPS:
                 a_stride = [0] + list(a.stride)
             else:
                 # both 3d
-                assert a.shape[0] == b.shape[0]
+                assert a.shape[0] == b.shape[0], f"{a.shape} @ {b.shape}"
                 BATCH, M, K = a.shape
                 BATCH, K, N = b.shape
 

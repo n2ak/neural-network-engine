@@ -4,10 +4,11 @@ import torch as T
 
 from tensor import Tensor
 from utils import dataloader
-from _test_utils import check, from_torch
+from grad import Grad
+from _test_utils import check, from_torch, check_tensor
 
 
-class Model1(T.nn.Module):
+class TorchModel(T.nn.Module):
     def __init__(self, inc, outc) -> None:
         super().__init__()
         self.seq = T.nn.Sequential(
@@ -43,18 +44,26 @@ class Model2(nn.Module[Tensor]):
 
 def test_nn_forward():
     T.manual_seed(0)
-    batch = 10
+    batch = 9
     inc, outc = 30, 10
     x = T.randn(batch, inc)
+    t = from_torch(x)
 
-    lin1 = Model1(inc, outc)
+    lin1 = TorchModel(inc, outc)
     lin2 = Model2(inc, outc)
     lin2.load_state(lin1.state_dict())
 
     res1 = lin1(x)
-    res2 = lin2(from_torch(x))
+    with Grad.on():
+        res2: Tensor = lin2(t)
 
-    check(res1, res2)
+    check_tensor(
+        (lin1.seq._modules["0"].weight,),
+        (lin2.seq.layers[0].weight,),
+        res1, res2,
+        check_grad=True,
+        atol=1e-6
+    )
 
 
 def test_minist():

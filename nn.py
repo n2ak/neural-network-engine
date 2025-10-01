@@ -40,12 +40,12 @@ class Linear(Module[Tensor]):
     def __init__(self, inc: int, outc: int, bias=True) -> None:
         self.bias = None
 
-        self.weight = Tensor.randn(inc, outc).requires_grad_(True)
+        self.weight = Tensor.randn(outc, inc).requires_grad_(True)
         if bias:
             self.bias = Tensor.randn(outc).requires_grad_(True)
 
     def forward(self, x):
-        res = x @ self.weight
+        res = x @ self.weight.transpose(0, 1)
         if self.bias is not None:
             res = res + self.bias
         return res
@@ -56,7 +56,7 @@ class Linear(Module[Tensor]):
 
         state = state.numpy()
         if member == "weight":
-            state = state.T
+            state = state  # .T
             old_tensor = self.weight
         elif member == "bias":
             # TODO: check if this module doenst have bias
