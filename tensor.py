@@ -407,7 +407,7 @@ class Tensor:
             raise NotImplementedError()
 
     def backward(self, grad=None):
-        assert self._requires_gradient
+        assert self._requires_gradient, "Tensor doesn't require gradient."
         if grad is None:
             grad = Tensor.from_numpy(np.array(1, dtype=np.float32))
 

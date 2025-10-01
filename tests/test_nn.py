@@ -57,9 +57,11 @@ def test_nn_forward():
     with Grad.on():
         res2: Tensor = lin2(t)
 
+    nlayers = len(lin2.seq.layers)
     check_tensor(
-        (lin1.seq._modules["0"].weight,),
-        (lin2.seq.layers[0].weight,),
+        tuple(lin1.seq._modules[str(idx)
+                                ].weight for idx in range(0, nlayers, 2)),
+        tuple(lin2.seq.layers[idx].weight for idx in range(0, nlayers, 2)),
         res1, res2,
         check_grad=True,
         atol=1e-6
@@ -92,6 +94,7 @@ def test_minist():
     for batch_X, batch_y in dataloader(X, y):
         batch_X = Tensor.from_numpy(batch_X)
         batch_y = Tensor.from_numpy(batch_y)
-
-        logits = model.forward(batch_X)
-        loss = nn.cross_entropy(logits, batch_y)
+        with Grad.on():
+            logits = model.forward(batch_X)
+            loss = nn.cross_entropy(logits, batch_y)
+        loss.backward()
