@@ -98,8 +98,23 @@ def test_bin_ops_inplace():
         def isub(a, b):
             a -= b
             return a
+
+        def iadd(a, b):
+            a += b
+            return a
+
+        def imul(a, b):
+            a -= b
+            return a
+
+        def idiv(a, b):
+            a -= b
+            return a
         funcs = [
+            ("iadd", iadd),
             ("isub", isub),
+            ("imul", imul),
+            ("idiv", idiv),
         ]
 
         shape = (3, 7, 5, 9)

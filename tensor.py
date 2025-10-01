@@ -138,9 +138,27 @@ class Tensor:
         return other / self
 
     @broadcast(second_only=True)
+    def __iadd__(self, other: Tensor):
+        assert self.shape == other.shape
+        CUDA_OPS.elem_op("add", self, other.astype(self.dtype), out=self)
+        return self
+
+    @broadcast(second_only=True)
     def __isub__(self, other: Tensor):
         assert self.shape == other.shape
         CUDA_OPS.elem_op("sub", self, other.astype(self.dtype), out=self)
+        return self
+
+    @broadcast(second_only=True)
+    def __imul__(self, other: Tensor):
+        assert self.shape == other.shape
+        CUDA_OPS.elem_op("mul", self, other.astype(self.dtype), out=self)
+        return self
+
+    @broadcast(second_only=True)
+    def __idiv__(self, other: Tensor):
+        assert self.shape == other.shape
+        CUDA_OPS.elem_op("div", self, other.astype(self.dtype), out=self)
         return self
 
     @broadcast()
