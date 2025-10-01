@@ -40,9 +40,9 @@ class Linear(Module[Tensor]):
     def __init__(self, inc: int, outc: int, bias=True) -> None:
         self.bias = None
 
-        self.weight = Tensor.randn(inc, outc)
+        self.weight = Tensor.randn(inc, outc).requires_grad_(True)
         if bias:
-            self.bias = Tensor.randn(outc)
+            self.bias = Tensor.randn(outc).requires_grad_(True)
 
     def forward(self, x):
         res = x @ self.weight
@@ -65,7 +65,7 @@ class Linear(Module[Tensor]):
         else:
             raise Exception(f"Invalid attr '{member}'")
 
-        new_tensor = Tensor.from_numpy(state)
+        new_tensor = Tensor.from_numpy(state).requires_grad_(True)
         assert old_tensor.shape == new_tensor.shape, (
             f"Expected shape: {old_tensor.shape} but found: {new_tensor.shape}")
         setattr(self, member, new_tensor)
