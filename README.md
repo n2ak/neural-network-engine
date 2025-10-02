@@ -105,3 +105,4 @@ for a complele example see: [mnist example](/mnist.ipynb).
 Some of the missing parts:
 
 * Conv nets and conv operations
+* Normalization layers
