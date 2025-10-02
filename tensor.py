@@ -104,22 +104,26 @@ class Tensor:
     @broadcast()
     @differentiable(2)
     def __add__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("add", self, other, backward_fn=grad_ops.add_backward)
+        return CUDA_OPS.elem_op("add", self, other,  # type: ignore
+                                backward_fn=grad_ops.add_backward)
 
     @broadcast()
     @differentiable(2)
     def __mul__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("mul", self, other, backward_fn=grad_ops.mul_backward)
+        return CUDA_OPS.elem_op("mul", self, other,  # type: ignore
+                                backward_fn=grad_ops.mul_backward)
 
     @broadcast()
     @differentiable(2)
     def __sub__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("sub", self, other, backward_fn=grad_ops.sub_backward)
+        return CUDA_OPS.elem_op("sub", self, other,  # type: ignore
+                                backward_fn=grad_ops.sub_backward)
 
     @broadcast()
     @differentiable(2)
     def __truediv__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("div", self, other, backward_fn=grad_ops.truediv_backward, floating_op=True)
+        return CUDA_OPS.elem_op("div", self, other,  # type: ignore
+                                backward_fn=grad_ops.truediv_backward, floating_op=True)
 
     # @differentiable_function(2)
     @broadcast()
@@ -152,19 +156,19 @@ class Tensor:
 
     @broadcast()
     def __lt__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("lt", self, other)
+        return CUDA_OPS.elem_op("lt", self, other)  # type: ignore
 
     @broadcast()
     def __le__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("le", self, other)
+        return CUDA_OPS.elem_op("le", self, other)  # type: ignore
 
     @broadcast()
     def __gt__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("gt", self, other)
+        return CUDA_OPS.elem_op("gt", self, other)  # type: ignore
 
     @broadcast()
     def __ge__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("ge", self, other)
+        return CUDA_OPS.elem_op("ge", self, other)  # type: ignore
 
     def __pow__(self, other: int):
         assert other == 2
@@ -249,7 +253,7 @@ class Tensor:
                 return False
         return True
 
-    def try_broadcast(self, other: Self, second_only=False):
+    def try_broadcast(self, other: "Tensor", second_only=False):
         assert isinstance(self, Tensor)
         if isinstance(other, (int, float)):
             other = Tensor.from_numpy(np.array(other, dtype=self.dtype))
@@ -429,7 +433,7 @@ class Tensor:
         else:
             raise NotImplementedError()
 
-    def backward(self, grad=None):
+    def backward(self, grad: Optional["Tensor"] = None):
         assert self._requires_gradient, "Tensor doesn't require gradient."
         if grad is None:
             grad = Tensor.from_numpy(np.array(1, dtype=np.float32))
@@ -444,7 +448,7 @@ class Tensor:
                     bfn, (BackwardFn, grad_ops.InplaceBackwardFn)), type(bfn)
                 grad = bfn.backward(grad)
         else:
-            self.grad = grad
+            self.grad = grad  # type: ignore
 
     def _set_backward_fn(self, func: BackwardFn | grad_ops.InplaceBackwardFn):
         if not hasattr(self, "_backward"):
