@@ -9,7 +9,7 @@ from .utils import assert_cuda_error
 
 # for the compiling and running? runtimes to be the same
 _CUDA = Binary("libcudart.so")
-MAX_DIMS = 4
+MAX_DIMS = 8
 
 
 class Buffer:
@@ -125,7 +125,7 @@ class CudaAllocator:
     @classmethod
     def alloc_empty(cls, shape, stride, dtype: np.typing.DTypeLike) -> Buffer:
         assert len(
-            shape) < MAX_DIMS, "Only tensors of up to {MAX_DIMS} dimensions can be allocated!"
+            shape) <= MAX_DIMS, f"Only tensors of up to {MAX_DIMS} dimensions can be allocated, requested: {len(shape)}"
         buffer = Buffer.new(shape, stride, dtype)
         # print(f"Allocated {buffer.nbytes} bytes")
         cls.mem += buffer.nbytes

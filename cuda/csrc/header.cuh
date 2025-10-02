@@ -3,7 +3,7 @@
 #include <cstdint>
 
 #define BLOCK_SIZE 1024
-#define MAX_DIMS 4
+#define MAX_DIMS 8
 #define float32 float
 #define float64 double
 #define int32 int
