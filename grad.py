@@ -1,10 +1,15 @@
 from __future__ import annotations
+import functools
 import numpy as np
 from contextlib import contextmanager
-from typing import Any, Callable, TypeVar, TYPE_CHECKING, Generic, ParamSpec, Unpack, TypeVarTuple
+from typing import Any, Callable, TypeVar, TYPE_CHECKING, ParamSpec, Unpack, TypeVarTuple, Concatenate
+
 T = TypeVar("T")
+S = TypeVar("S")
+R = TypeVar("R")
 P = ParamSpec("P")
 Ts = TypeVarTuple("Ts")
+
 if TYPE_CHECKING:
     from tensor import Tensor
     Func = Callable[P, tuple[Tensor, Callable[[Tensor], tuple[Unpack[Ts]]]]]
@@ -73,7 +78,8 @@ class BackwardFn():
         from tensor import Tensor
         self._backward_fn = backward_fn
         self.inputs = args
-        result.requires_grad = any(map(lambda a: a.requires_grad, args))
+        result.requires_grad = any(
+            map(lambda a: a.requires_grad, args))  # type: ignore
         result._set_backward_fn(self)
 
     def backward(self, incoming_grad: Tensor):
@@ -115,28 +121,26 @@ indent = 0
 
 
 def broadcast(second_only=False):
-    def decorator(func: Callable[P, Tensor]) -> Callable[P, Tensor]:
-        import functools
+    def decorator(
+            func: Callable[Concatenate[S, T, P], R]
+    ) -> Callable[Concatenate[S, Tensor | int | float, P], R]:
 
         @functools.wraps(func)
-        def wrapper(x: Tensor, y: Tensor, *args, **kwargs):
-            x, y = x.try_broadcast(y, second_only)
-            return func(x, y, *args, **kwargs)
-
+        def wrapper(x: S, y: Tensor | int | float, *args, **kwargs) -> R:
+            x, ty = x.try_broadcast(y, second_only)  # type: ignore
+            return func(x, ty, *args, **kwargs)
         return wrapper
+
     return decorator
 
 
 def differentiable(number_of_args: int):
-    import functools
-
     def register(func: Func):
-
         @functools.wraps(func)
-        def a(*args, **kwargs):
+        def wrapper(*args, **kwargs):
             dfunc = BackwardFn(func, func.__name__, number_of_args)
             return dfunc(*args, **kwargs)
-        return a
+        return wrapper
     return register
 
 

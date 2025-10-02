@@ -115,31 +115,31 @@ class Tensor:
 
     @broadcast()
     @differentiable(2)
-    def __add__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("add", self, other,  # type: ignore
+    def __add__(self, other: Tensor):
+        return CUDA_OPS.elem_op("add", self, other,
                                 backward_fn=grad_ops.add_backward)
 
     @broadcast()
     @differentiable(2)
-    def __mul__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("mul", self, other,  # type: ignore
+    def __mul__(self, other: Tensor):
+        return CUDA_OPS.elem_op("mul", self, other,
                                 backward_fn=grad_ops.mul_backward)
 
     @broadcast()
     @differentiable(2)
-    def __sub__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("sub", self, other,  # type: ignore
+    def __sub__(self, other: Tensor):
+        return CUDA_OPS.elem_op("sub", self, other,
                                 backward_fn=grad_ops.sub_backward)
 
     @broadcast()
     @differentiable(2)
-    def __truediv__(self, other: Self | int | float):
-        return CUDA_OPS.elem_op("div", self, other,  # type: ignore
+    def __truediv__(self, other: Tensor):
+        return CUDA_OPS.elem_op("div", self, other,
                                 backward_fn=grad_ops.truediv_backward, floating_op=True)
 
     # @differentiable_function(2)
     @broadcast()
-    def __rtruediv__(self, other: int | float):
+    def __rtruediv__(self, other: Tensor):
         return other / self
 
     @broadcast(second_only=True)
@@ -512,6 +512,7 @@ class CUDA_OPS:
     @classmethod
     def elem_op(
         cls, op_name: str, a: Tensor, b: Tensor,
+        backward_fn: None = None,
         floating_op: bool = False,
         out: Optional[Tensor] = None,
     ) -> Tensor: ...
@@ -572,6 +573,7 @@ class CUDA_OPS:
     @overload
     def uop(
         cls, op_name: str, a: Tensor,
+        backward_fn: None = None,
         floating_op: bool = True
     ) -> Tensor: ...
 
@@ -611,6 +613,7 @@ class CUDA_OPS:
     @overload
     def reduce_op(
         cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool,
+        backward_fn: None = None,
         out_dtype=None,
     ) -> Tensor: ...
 
@@ -624,8 +627,9 @@ class CUDA_OPS:
 
     @classmethod
     def reduce_op(
-        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool, out_dtype=None,
+        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool,
         backward_fn: Optional[ReduceOpBackwardFnWrapper] = None,
+        out_dtype=None,
     ):
         if out_dtype is None:
             out_dtype = a.dtype
