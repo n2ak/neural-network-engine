@@ -88,6 +88,18 @@ class Tensor:
     def zeros(cls, shape, dtype=np.float32):
         return Tensor.from_numpy(np.zeros(shape=shape, dtype=dtype))
 
+    @classmethod
+    def ones_like(cls, t: "Tensor"):
+        return Tensor.ones(*t.shape, dtype=t.dtype)
+
+    @classmethod
+    def ones(cls, *shape: int, dtype: np.typing.DTypeLike = np.float32):
+        return Tensor.from_numpy(np.ones(shape=shape, dtype=dtype))
+
+    @classmethod
+    def randint(cls, low: int, high: int, shape: tuple[int, ...], dtype: np.typing.DTypeLike = np.int32):
+        return Tensor.from_numpy(np.random.randint(low, high, size=shape).astype(dtype))
+
     def astype(self, dtype) -> "Tensor":
         if dtype == self.dtype:
             return self
