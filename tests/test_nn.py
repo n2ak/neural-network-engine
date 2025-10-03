@@ -59,12 +59,12 @@ def test_nn_forward():
 
     nlayers = len(lin2.seq.layers)
     check_tensor(
-        tuple(lin1.seq._modules[str(idx)
-                                ].weight for idx in range(0, nlayers, 2)),
+        tuple(lin1.seq._modules[str(idx)].weight for idx in range(0, nlayers, 2)),
         tuple(lin2.seq.layers[idx].weight for idx in range(0, nlayers, 2)),
-        res1, res2,
+        res1,
+        res2,
         check_grad=True,
-        atol=1e-6
+        atol=1e-6,
     )
 
 

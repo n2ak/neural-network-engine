@@ -1,4 +1,3 @@
-
 import os
 import tempfile
 import subprocess
@@ -15,8 +14,13 @@ def compile_cuda_code(code: str, lib_name="libtemp.so"):
         with open(cu_path, "w") as f:
             f.write(code)
         cmd = [
-            nvcc_path, "-shared", "-Xcompiler", "-fPIC", cu_path,
-            "-o", so_path,
+            nvcc_path,
+            "-shared",
+            "-Xcompiler",
+            "-fPIC",
+            cu_path,
+            "-o",
+            so_path,
             "-lcudart",
             "--expt-relaxed-constexpr",  # for host constexpr to be used is device
             "-arch=sm_86",
@@ -31,13 +35,15 @@ def get_cuda_code():
     from ._reduce_ops import reduction_ops_source_code
     from ._elemwsie_ops import element_wise_source_code
 
-    code = "\n".join([
-        read_cuda_source(),
-        reduction_ops_source_code(),
-        element_wise_source_code(),
-        unary_ops_source_code(),
-        other_ops_source_code(),
-    ])
+    code = "\n".join(
+        [
+            read_cuda_source(),
+            reduction_ops_source_code(),
+            element_wise_source_code(),
+            unary_ops_source_code(),
+            other_ops_source_code(),
+        ]
+    )
     return code
 
 
@@ -76,6 +82,7 @@ def promote_uop_dtype(input_dtype, floating_operation):
 
 def read_cuda_source():
     import pathlib
+
     source_dir = pathlib.Path(__file__).parent / "csrc"
     with open(source_dir / "header.cuh") as f:
         header = f.read()

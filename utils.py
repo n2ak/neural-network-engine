@@ -21,7 +21,8 @@ class DataLoader:
             self.arrs = tuple(arr[perm] for arr in self.arrs)
         self.idx = 0
 
-    def __len__(self): return self.dlen // self.batch_size
+    def __len__(self):
+        return self.dlen // self.batch_size
 
     def __iter__(self):
         self._prepare()
@@ -30,7 +31,6 @@ class DataLoader:
     def __next__(self):
         if self.idx >= self.dlen:
             raise StopIteration
-        batch = tuple(arr[self.idx:self.idx+self.batch_size]
-                      for arr in self.arrs)
+        batch = tuple(arr[self.idx : self.idx + self.batch_size] for arr in self.arrs)
         self.idx += self.batch_size
         return batch

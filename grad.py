@@ -2,7 +2,16 @@ from __future__ import annotations
 import functools
 import numpy as np
 from contextlib import contextmanager
-from typing import Any, Callable, TypeVar, TYPE_CHECKING, ParamSpec, Unpack, TypeVarTuple, Concatenate
+from typing import (
+    Any,
+    Callable,
+    TypeVar,
+    TYPE_CHECKING,
+    ParamSpec,
+    Unpack,
+    TypeVarTuple,
+    Concatenate,
+)
 
 T = TypeVar("T")
 S = TypeVar("S")
@@ -12,6 +21,7 @@ Ts = TypeVarTuple("Ts")
 
 if TYPE_CHECKING:
     from tensor import Tensor
+
     Func = Callable[P, tuple[Tensor, Callable[[Tensor], tuple[Unpack[Ts]]]]]
 
     UnaryOpBackwardFn = Callable[[Tensor], tuple[Tensor]]
@@ -19,11 +29,11 @@ if TYPE_CHECKING:
     ReduceOpBackwardFn = Callable[[Tensor], tuple[Tensor]]
 
     UnaryOpBackwardFnWrapper = Callable[[Tensor, Tensor], UnaryOpBackwardFn]
-    ElemWiseBackwardFnWrapper = Callable[[
-        Tensor, Tensor, Tensor], ElemWiseBackwardFn]
+    ElemWiseBackwardFnWrapper = Callable[[Tensor, Tensor, Tensor], ElemWiseBackwardFn]
 
-    ReduceOpBackwardFnWrapper = Callable[[
-        Tensor, Tensor, tuple[int, ...], bool], ReduceOpBackwardFn]
+    ReduceOpBackwardFnWrapper = Callable[
+        [Tensor, Tensor, tuple[int, ...], bool], ReduceOpBackwardFn
+    ]
 
 
 class Grad:
@@ -44,7 +54,7 @@ class Grad:
         return False
 
 
-class BackwardFn():
+class BackwardFn:
     def __init__(
         self,
         function: Func,
@@ -67,38 +77,44 @@ class BackwardFn():
             # print("Called", self.name, "Inputs:", args)
             # we setup for backward pass
             # we save only the inputs that require gradient
-            self.setup_for_backward_pass(result, backward_fn, args[:self.n])
+            self.setup_for_backward_pass(result, backward_fn, args[: self.n])
         return result
 
     def setup_for_backward_pass(
-        self, result: Tensor,
+        self,
+        result: Tensor,
         backward_fn: Callable[[Tensor], tuple[Tensor, ...]],
-        args: tuple[Tensor | int | float]
+        args: tuple[Tensor | int | float],
     ):
         from tensor import Tensor
+
         self._backward_fn = backward_fn
         self.inputs = args
-        result.requires_grad = any(
-            map(lambda a: a.requires_grad, args))  # type: ignore
+        result.requires_grad = any(map(lambda a: a.requires_grad, args))  # type: ignore
         result._set_backward_fn(self)
 
     def backward(self, incoming_grad: Tensor):
         global indent
         # the chain rule
         from tensor import Tensor
+
         indent += 1
 
         with Grad.on(False):
             gradients = self._backward_fn(incoming_grad)
-            assert len(
-                gradients) == self.n, f"Backward function is expected to return {self.n} gradient tensors, but found {len(gradients)}"
-            assert all(map(lambda g: isinstance(g, Tensor), gradients)
-                       ), f"Backward function is expected to return tensors only"
+            assert (
+                len(gradients) == self.n
+            ), f"Backward function is expected to return {self.n} gradient tensors, but found {len(gradients)}"
+            assert all(
+                map(lambda g: isinstance(g, Tensor), gradients)
+            ), f"Backward function is expected to return tensors only"
 
             for i, input, gradient in zip(range(self.n), self.inputs, gradients):
                 if isinstance(input, Tensor) and input.requires_grad:
                     assert gradient.dtype in [
-                        np.float32, np.float64], f"Expected {i+1}th gradient to be a    float instead of {gradient.dtype}"
+                        np.float32,
+                        np.float64,
+                    ], f"Expected {i+1}th gradient to be a    float instead of {gradient.dtype}"
 
                     input.backward(gradient)
         indent -= 1
@@ -122,13 +138,14 @@ indent = 0
 
 def broadcast(second_only=False):
     def decorator(
-            func: Callable[Concatenate[S, T, P], R]
+        func: Callable[Concatenate[S, T, P], R],
     ) -> Callable[Concatenate[S, Tensor | int | float, P], R]:
 
         @functools.wraps(func)
         def wrapper(x: S, y: Tensor | int | float, *args, **kwargs) -> R:
             x, ty = x.try_broadcast(y, second_only)  # type: ignore
             return func(x, ty, *args, **kwargs)
+
         return wrapper
 
     return decorator
@@ -140,58 +157,69 @@ def differentiable(number_of_args: int):
         def wrapper(*args, **kwargs):
             dfunc = BackwardFn(func, func.__name__, number_of_args)
             return dfunc(*args, **kwargs)
+
         return wrapper
+
     return register
 
 
 def add_backward(x: Tensor, other: Tensor, res: Tensor) -> ElemWiseBackwardFn:
     def backward(gradient: Tensor):
         return gradient, gradient
+
     return backward
 
 
 def sub_backward(x: Tensor, other: Tensor, res: Tensor) -> ElemWiseBackwardFn:
     def backward(gradient: Tensor):
-        return gradient, gradient*-1
+        return gradient, gradient * -1
+
     return backward
 
 
 def mul_backward(x: Tensor, other: Tensor, res: Tensor) -> ElemWiseBackwardFn:
     def backward(gradient: Tensor):
         return other * gradient, x * gradient
+
     return backward
 
 
 def truediv_backward(x: Tensor, other: Tensor, res: Tensor) -> ElemWiseBackwardFn:
     def backward(gradient: Tensor):
         dx = 1 / other * gradient
-        dother = gradient * x * -1 / (other ** 2)
+        dother = gradient * x * -1 / (other**2)
         return dx, dother
+
     return backward
 
 
 def exp_backward(x: Tensor, res: Tensor) -> UnaryOpBackwardFn:
     def backward(gradient: Tensor):
-        return res * gradient,
+        return (res * gradient,)
+
     return backward
 
 
 def log_backward(x: Tensor, res: Tensor) -> UnaryOpBackwardFn:
     def backward(gradient: Tensor):
-        return gradient/x,
+        return (gradient / x,)
+
     return backward
 
 
 def log2_backward(x: Tensor, res: Tensor) -> UnaryOpBackwardFn:
     def backward(gradient: Tensor):
-        return gradient/(x * ln2),
+        return (gradient / (x * ln2),)
+
     return backward
 
 
 ln2 = np.log(2).item()
 
 
-def sum_backward(x: Tensor, res: Tensor, axis: tuple[int, ...], keepdim: bool) -> ReduceOpBackwardFn:
+def sum_backward(
+    x: Tensor, res: Tensor, axis: tuple[int, ...], keepdim: bool
+) -> ReduceOpBackwardFn:
     axis = tuple(sorted(list(axis)))  # for insert
 
     def backward(gradient: Tensor):
@@ -205,7 +233,8 @@ def sum_backward(x: Tensor, res: Tensor, axis: tuple[int, ...], keepdim: bool) -
                 gradient_shape[i] = x.shape[i]
         else:
             gradient_shape = x.shape
-        return gradient.expand(*gradient_shape),
+        return (gradient.expand(*gradient_shape),)
+
     return backward
 
 
@@ -218,4 +247,5 @@ def matmul_backward(x, y):
         if dy.ndim != y.ndim:
             dy = dy.sum(0)
         return dx, dy
+
     return backward

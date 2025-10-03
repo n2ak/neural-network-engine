@@ -1,8 +1,17 @@
 import torch
 import numpy as np
 from tensor import Tensor
-from typing import Callable, Any, TypeVar, Unpack, TypeVarTuple, ParamSpecArgs, ParamSpec
+from typing import (
+    Callable,
+    Any,
+    TypeVar,
+    Unpack,
+    TypeVarTuple,
+    ParamSpecArgs,
+    ParamSpec,
+)
 from grad import Grad
+
 T = TypeVar("T")
 Ts = TypeVarTuple("Ts")
 P = ParamSpec("P")
@@ -18,13 +27,24 @@ def check(
 ):
 
     if check_grad:
-        inputs_torch = tuple(i.requires_grad_(i.dtype.is_floating_point) if isinstance(
-            i, torch.Tensor) else i for i in inputs_torch)
-        check_grad = any(map(lambda t: t.requires_grad if isinstance(
-            t, torch.Tensor) else False, inputs_torch))
+        inputs_torch = tuple(
+            (
+                i.requires_grad_(i.dtype.is_floating_point)
+                if isinstance(i, torch.Tensor)
+                else i
+            )
+            for i in inputs_torch
+        )
+        check_grad = any(
+            map(
+                lambda t: t.requires_grad if isinstance(t, torch.Tensor) else False,
+                inputs_torch,
+            )
+        )
 
-    inputs_tensors = tuple(from_torch(i) if isinstance(
-        i, torch.Tensor) else i for i in inputs_torch)
+    inputs_tensors = tuple(
+        from_torch(i) if isinstance(i, torch.Tensor) else i for i in inputs_torch
+    )
 
     a1: torch.Tensor = func(*inputs_torch)  # type: ignore
     with Grad.on(check_grad):
@@ -32,15 +52,18 @@ def check(
 
     print(
         "Input Dtypes:",
-        [inp.dtype if isinstance(inp, Tensor)else type(inp)
-         for inp in inputs_tensors],
-        "Result type:", a2.dtype
+        [inp.dtype if isinstance(inp, Tensor) else type(inp) for inp in inputs_tensors],
+        "Result type:",
+        a2.dtype,
     )
     check_tensor(
         inputs_torch,
         inputs_tensors,
-        a1, a2,
-        rtol=rtol, atol=atol, check_grad=check_grad
+        a1,
+        a2,
+        rtol=rtol,
+        atol=atol,
+        check_grad=check_grad,
     )
 
 
@@ -49,7 +72,9 @@ def check_tensor(
     inputs_tensors: tuple[Tensor | int, ...],
     a1: torch.Tensor,
     a2: Tensor,
-    rtol=1e-05, atol=1e-08, check_grad=False,
+    rtol=1e-05,
+    atol=1e-08,
+    check_grad=False,
 ):
     if check_grad:
         a1.backward(torch.ones_like(a1))
@@ -60,7 +85,7 @@ def check_tensor(
 
     # assert a1.stride() == a2.stride, (a1.stride(), a2.stride)
 
-    a1_numpy = a1.numpy(force=True) if isinstance(a1, torch.Tensor)else a1
+    a1_numpy = a1.numpy(force=True) if isinstance(a1, torch.Tensor) else a1
     a2_numpy = a2.numpy()
 
     check_numpy(a1_numpy, a2_numpy, rtol=rtol, atol=atol)
@@ -78,16 +103,18 @@ def check_tensor(
             check_numpy(t1.grad.numpy(), t2.grad.numpy(), check_dtype=False)
 
 
-def check_numpy(a1_numpy: np.ndarray, a2_numpy: np.ndarray, rtol=1e-05,
-                atol=1e-08, check_dtype=True):
+def check_numpy(
+    a1_numpy: np.ndarray, a2_numpy: np.ndarray, rtol=1e-05, atol=1e-08, check_dtype=True
+):
     # if contiguous:
     #     a1_numpy = np.ascontiguousarray(a1_numpy)
     #     a2_numpy = np.ascontiguousarray(a2_numpy)
     if check_dtype:
-        assert a1_numpy.dtype == a2_numpy.dtype, (
-            a1_numpy.dtype, a2_numpy.dtype)
+        assert a1_numpy.dtype == a2_numpy.dtype, (a1_numpy.dtype, a2_numpy.dtype)
         assert a1_numpy.strides == a2_numpy.strides, (
-            a1_numpy.strides, a2_numpy.strides)
+            a1_numpy.strides,
+            a2_numpy.strides,
+        )
     assert a1_numpy.shape == a2_numpy.shape, (a1_numpy.shape, a2_numpy.shape)
 
     assert np.all(np.isfinite(a2_numpy))
@@ -104,4 +131,5 @@ def from_torch(a: torch.Tensor):
     return Tensor.from_numpy(a.detach().numpy()).requires_grad_(a.requires_grad)
 
 
-def from_numpy(a: np.typing.NDArray): return Tensor.from_numpy(a)
+def from_numpy(a: np.typing.NDArray):
+    return Tensor.from_numpy(a)

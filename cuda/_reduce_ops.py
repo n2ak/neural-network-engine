@@ -1,15 +1,21 @@
-
 from ctypes import c_int, c_void_p
 from .utils import _int_1d_array
 
 REDUCE_OPS = [
-    ("sum",
-        ("float32", "float32"), ("float64", "float64"),
-        ("int32", "int64"), ("int64", "int64")
-     ),
-    ("max",
-        ("float32", "float32"), ("float64", "float64"),
-        ("int32", "int32"), ("int64", "int64")),
+    (
+        "sum",
+        ("float32", "float32"),
+        ("float64", "float64"),
+        ("int32", "int64"),
+        ("int64", "int64"),
+    ),
+    (
+        "max",
+        ("float32", "float32"),
+        ("float64", "float64"),
+        ("int32", "int32"),
+        ("int64", "int64"),
+    ),
 ]
 
 
@@ -23,28 +29,40 @@ def reduction_op_name(name, in_dtype, out_dtype):
 
 def define_reduce_op(name: str):
     from . import CUDA_KERNELS
-    CUDA_KERNELS.define_function(name, [
-        c_void_p, _int_1d_array(), _int_1d_array(),  # a
-        c_void_p, _int_1d_array(), _int_1d_array(),  # output
-        _int_1d_array(),
-        c_int,
-        c_int,
-        c_int,
-    ])
+
+    CUDA_KERNELS.define_function(
+        name,
+        [
+            c_void_p,
+            _int_1d_array(),
+            _int_1d_array(),  # a
+            c_void_p,
+            _int_1d_array(),
+            _int_1d_array(),  # output
+            _int_1d_array(),
+            c_int,
+            c_int,
+            c_int,
+        ],
+    )
 
 
 def define_reducction_op(name: str):
     from . import CUDA_KERNELS
-    CUDA_KERNELS.define_function(name, [
-        c_void_p,  # a
-        c_void_p,  # output
-        c_int,  # totalSize
-    ])
+
+    CUDA_KERNELS.define_function(
+        name,
+        [
+            c_void_p,  # a
+            c_void_p,  # output
+            c_int,  # totalSize
+        ],
+    )
 
 
 def register_reduce_ops():
     for name, *dtypes in REDUCE_OPS:
-        for (in_dtype, out_dtypes) in dtypes:
+        for in_dtype, out_dtypes in dtypes:
             define_reduce_op(reduceop_name(name, in_dtype, out_dtypes))
             define_reducction_op(reduction_op_name(name, in_dtype, out_dtypes))
 
@@ -74,6 +92,7 @@ def reduce_axis_code(name: str, *dtypes: tuple[str, str]):
         }}
         """
         return code
+
     assert len(dtypes) > 0
     return "\n\n".join(map(reduceop, dtypes))
 
@@ -91,12 +110,12 @@ def reduction_op_code(name: str, *dtypes: tuple[str, str]):
         }}
         """
         return code2
+
     assert len(dtypes) > 0
     return "\n\n".join(map(reduceop, dtypes))
 
 
 def reduction_ops_source_code():
-    return (
-        "\n\n".join(map(lambda v: reduce_axis_code(*v), REDUCE_OPS)) +
-        "\n\n".join(map(lambda v: reduction_op_code(*v), REDUCE_OPS))
+    return "\n\n".join(map(lambda v: reduce_axis_code(*v), REDUCE_OPS)) + "\n\n".join(
+        map(lambda v: reduction_op_code(*v), REDUCE_OPS)
     )

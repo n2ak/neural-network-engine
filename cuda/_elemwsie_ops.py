@@ -1,4 +1,3 @@
-
 from ctypes import c_int, c_void_p
 from .utils import _int_1d_array, promote_dtype
 
@@ -21,13 +20,20 @@ def elemwise_op_name(name, in_dtype, in_dtype2, out_dtype):
 
 def define_elemwise_op(name: str):
     from . import CUDA_KERNELS
-    CUDA_KERNELS.define_function(name, [
-        c_void_p, _int_1d_array(),  # a
-        c_void_p, _int_1d_array(),  # b
-        c_void_p, _int_1d_array(),  # output
-        _int_1d_array(),  # shape
-        c_int,
-    ])
+
+    CUDA_KERNELS.define_function(
+        name,
+        [
+            c_void_p,
+            _int_1d_array(),  # a
+            c_void_p,
+            _int_1d_array(),  # b
+            c_void_p,
+            _int_1d_array(),  # output
+            _int_1d_array(),  # shape
+            c_int,
+        ],
+    )
 
 
 def register_elemwise_ops():
@@ -37,8 +43,7 @@ def register_elemwise_ops():
                 if name in ["lt", "le", "gt", "ge"]:
                     out_dtype = "bool"
                 else:
-                    out_dtype = promote_dtype(
-                        in_dtype1, in_dtype2, floating_op)
+                    out_dtype = promote_dtype(in_dtype1, in_dtype2, floating_op)
                 define_elemwise_op(
                     elemwise_op_name(name, in_dtype1, in_dtype2, out_dtype)
                 )
@@ -53,8 +58,7 @@ def elemwise_code(name: str, floating_op: bool, *dtypes: str):
         else:
             out_dtype = promote_dtype(input_dtype1, input_dtype2, floating_op)
 
-        func_name = elemwise_op_name(
-            name, input_dtype1, input_dtype2, out_dtype)
+        func_name = elemwise_op_name(name, input_dtype1, input_dtype2, out_dtype)
         code = f"""
         extern "C" void {func_name}(
             const {input_dtype1} *A, const int* stride_A,
@@ -74,9 +78,10 @@ def elemwise_code(name: str, floating_op: bool, *dtypes: str):
         }}
         """
         return code
+
     assert len(dtypes) > 0
 
-    return "\n\n".join([elem_op_code_dype(d1, d2)for d1 in dtypes for d2 in dtypes])
+    return "\n\n".join([elem_op_code_dype(d1, d2) for d1 in dtypes for d2 in dtypes])
 
 
 def element_wise_source_code():

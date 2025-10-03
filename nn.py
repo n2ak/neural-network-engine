@@ -43,7 +43,8 @@ class Module(Generic[T], ABC):
                 yield value
 
     @property
-    def name(self): return self.__class__.__name__
+    def name(self):
+        return self.__class__.__name__
 
 
 class Linear(Module[Tensor]):
@@ -73,13 +74,16 @@ class Linear(Module[Tensor]):
         elif member == "bias":
             # TODO: check if this module doenst have bias
             old_tensor = self.bias
-            assert old_tensor is not None
+            assert (
+                old_tensor is not None
+            ), "This layer doesn't contain a bias, but the state provides it!"
         else:
             raise Exception(f"Invalid attr '{member}'")
 
         new_tensor = Tensor.from_numpy(state).requires_grad_(True)
-        assert old_tensor.shape == new_tensor.shape, (
-            f"Expected shape: {old_tensor.shape} but found: {new_tensor.shape}")
+        assert (
+            old_tensor.shape == new_tensor.shape
+        ), f"Expected shape: {old_tensor.shape} but found: {new_tensor.shape}"
         setattr(self, member, new_tensor)
 
 
@@ -88,7 +92,7 @@ class Sequential(Module[Any]):
         self.layers = layers
 
     def forward(self, x):
-        for i, layer in enumerate(self.layers):
+        for _, layer in enumerate(self.layers):
             x = layer.forward(x)
         return x
 
@@ -122,7 +126,7 @@ def cross_entropy(input: Tensor, target: Tensor, dim=-1):
         dx = softmax(input, dim=dim).numpy()
         dx[list(range(batch)), target.numpy().astype(int)] -= 1
         dx /= batch
-        return Tensor.from_numpy(dx * gradient.numpy()),
+        return (Tensor.from_numpy(dx * gradient.numpy()),)
 
     return x, backward
 
@@ -131,10 +135,13 @@ def negative_log_likelihood(tinput: Tensor, ttarget: Tensor):
     # we don't support selecting with lists yet! (input[list1,list2,...])
     input = tinput.numpy()
     target = ttarget.numpy()
-    assert np.all(input <= 0), (
-        f"Not all elements are negative, has NaNs: {np.any(np.isnan(input))}, max: {input.max()}")
+    assert np.all(
+        input <= 0
+    ), f"Not all elements are negative, has NaNs: {np.any(np.isnan(input))}, max: {input.max()}"
     indices = target.astype(int)
-    assert input.shape[0] == target.shape[0], "Input and target should have same batch size."
+    assert (
+        input.shape[0] == target.shape[0]
+    ), "Input and target should have same batch size."
 
     # NOTE: input[:, indices] yields wrong result
     res = input[np.arange(target.size), indices] * -1
@@ -151,7 +158,7 @@ def log_softmax(x: Tensor, dim=-1) -> Tensor:
 def softmax(x: Tensor, dim: int = -1) -> Tensor:
     m = x - x.max(axis=dim, keepdim=True)
     e = m.exp()
-    res = e/e.sum(axis=dim, keepdim=True)
+    res = e / e.sum(axis=dim, keepdim=True)
     return res
 
 
@@ -171,10 +178,10 @@ def kaiming(
         fan_mode = f_in if fan_mode == "fan_in" else f_out
     match distribution:
         case "normal":
-            std = gain/np.sqrt(fan_mode)
+            std = gain / np.sqrt(fan_mode)
             t = np.random.normal(0, std**2, size)
         case "uniform":
-            bounds = gain * np.sqrt(3/(fan_mode))
+            bounds = gain * np.sqrt(3 / (fan_mode))
             t = np.random.uniform(-bounds, bounds, size)
         case _:
             raise NotImplementedError(f"Unknown distribution: {distribution}")
@@ -183,20 +190,18 @@ def kaiming(
 
 def get_gain(fun: str):
     import numpy as np
+
     # https://pytorch.org/docs/stable/nn.init.html#torch.nn.init.calculate_gain
     fun = fun.lower()
     ones = ["conv1d", "conv2d", "conv3d", "sigmoid", "linear", "identity"]
     if fun in ones:
         return 1
-    d = {
-        "relu": np.sqrt(2),
-        "selu": 3/4,
-        "tanh": 5/4
-    }
+    d = {"relu": np.sqrt(2), "selu": 3 / 4, "tanh": 5 / 4}
     return d[fun]
 
 
 def calculate_fans(shape):
     import numpy as np
+
     prod = np.prod(shape)
-    return prod//shape[1], prod//shape[0]
+    return prod // shape[1], prod // shape[0]

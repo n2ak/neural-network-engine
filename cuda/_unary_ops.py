@@ -1,4 +1,3 @@
-
 from ctypes import c_int, c_void_p
 from .utils import _int_1d_array, promote_uop_dtype
 
@@ -16,12 +15,18 @@ def uop_name(name, in_dtype, out_dtype):
 
 def define_uop(name):
     from . import CUDA_KERNELS
-    CUDA_KERNELS.define_function(name, [
-        c_void_p, _int_1d_array(),  # a
-        c_void_p, _int_1d_array(),  # output
-        _int_1d_array(),  # shape
-        c_int,
-    ])
+
+    CUDA_KERNELS.define_function(
+        name,
+        [
+            c_void_p,
+            _int_1d_array(),  # a
+            c_void_p,
+            _int_1d_array(),  # output
+            _int_1d_array(),  # shape
+            c_int,
+        ],
+    )
 
 
 def register_uops():
@@ -49,6 +54,7 @@ def uops_code(name: str, floating_operation: bool, *dtypes: str):
         }}
         """
         return code
+
     assert len(dtypes) > 0
     return "\n\n".join(map(uop, dtypes))
 
