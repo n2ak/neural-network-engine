@@ -64,8 +64,23 @@ def test_elemwise_ops_inplace():
             a -= b
             return a
 
+        def iadd(a, b):
+            a += b
+            return a
+
+        def imul(a, b):
+            a -= b
+            return a
+
+        def idiv(a, b):
+            a -= b
+            return a
+
         funcs = [
             ("isub", isub),
+            ("iadd", iadd),
+            ("imul", imul),
+            ("idiv", idiv),
         ]
 
         for name, func in funcs:
