@@ -12,7 +12,14 @@ from grad import BackwardFn, differentiable, broadcast
 from typing import Self, Optional, overload, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from grad import ElemWiseBackwardFn, ElemWiseBackwardFnWrapper, UnaryOpBackwardFnWrapper, UnaryOpBackwardFn, ReduceOpBackwardFnWrapper, ReduceOpBackwardFn
+    from grad import (
+        ElemWiseBackwardFn,
+        ElemWiseBackwardFnWrapper,
+        UnaryOpBackwardFnWrapper,
+        UnaryOpBackwardFn,
+        ReduceOpBackwardFnWrapper,
+        ReduceOpBackwardFn,
+    )
 
 
 def get_numpy_stride(arr: np.typing.NDArray):
@@ -41,16 +48,20 @@ class Tensor:
         self._grad: Optional[Tensor] = None
 
     @property
-    def shape(self): return self.data.shape
+    def shape(self):
+        return self.data.shape
+
     @property
-    def stride(self): return self.data.stride
+    def stride(self):
+        return self.data.stride
 
     @property
     def stride_bytes(self):
         return tuple(s * self.dtype.itemsize for s in self.data.stride)
 
     @property
-    def dtype(self): return self.data.dtype
+    def dtype(self):
+        return self.data.dtype
 
     @property
     def is_contiguous(self):
@@ -76,9 +87,14 @@ class Tensor:
         return CUDA_OPS.copy_out(self, out)
 
     @classmethod
-    def empty(cls, shape, dtype: np.typing.DTypeLike = np.float32, ):
+    def empty(
+        cls,
+        shape,
+        dtype: np.typing.DTypeLike = np.float32,
+    ):
         data = CudaAllocator.alloc_empty(
-            shape=shape, stride=stride_from_shape(shape), dtype=dtype)
+            shape=shape, stride=stride_from_shape(shape), dtype=dtype
+        )
         stride = stride_from_shape(shape)
         return Tensor(
             data,
@@ -97,7 +113,13 @@ class Tensor:
         return Tensor.from_numpy(np.ones(shape=shape, dtype=dtype))
 
     @classmethod
-    def randint(cls, low: int, high: int, shape: tuple[int, ...], dtype: np.typing.DTypeLike = np.int32):
+    def randint(
+        cls,
+        low: int,
+        high: int,
+        shape: tuple[int, ...],
+        dtype: np.typing.DTypeLike = np.int32,
+    ):
         return Tensor.from_numpy(np.random.randint(low, high, size=shape).astype(dtype))
 
     def astype(self, dtype) -> "Tensor":
@@ -116,26 +138,24 @@ class Tensor:
     @broadcast()
     @differentiable(2)
     def __add__(self, other: Tensor):
-        return CUDA_OPS.elem_op("add", self, other,
-                                backward_fn=grad_ops.add_backward)
+        return CUDA_OPS.elem_op("add", self, other, backward_fn=grad_ops.add_backward)
 
     @broadcast()
     @differentiable(2)
     def __mul__(self, other: Tensor):
-        return CUDA_OPS.elem_op("mul", self, other,
-                                backward_fn=grad_ops.mul_backward)
+        return CUDA_OPS.elem_op("mul", self, other, backward_fn=grad_ops.mul_backward)
 
     @broadcast()
     @differentiable(2)
     def __sub__(self, other: Tensor):
-        return CUDA_OPS.elem_op("sub", self, other,
-                                backward_fn=grad_ops.sub_backward)
+        return CUDA_OPS.elem_op("sub", self, other, backward_fn=grad_ops.sub_backward)
 
     @broadcast()
     @differentiable(2)
     def __truediv__(self, other: Tensor):
-        return CUDA_OPS.elem_op("div", self, other,
-                                backward_fn=grad_ops.truediv_backward, floating_op=True)
+        return CUDA_OPS.elem_op(
+            "div", self, other, backward_fn=grad_ops.truediv_backward, floating_op=True
+        )
 
     # @differentiable_function(2)
     @broadcast()
@@ -203,14 +223,21 @@ class Tensor:
         return CUDA_OPS.uop("log2", self, backward_fn=grad_ops.log2_backward)
 
     def max(self, axis: int | tuple[int, ...] = (), keepdim=False):
-        return CUDA_OPS.reduce_op("max", self,  axis=axis, keepdim=keepdim)
+        return CUDA_OPS.reduce_op("max", self, axis=axis, keepdim=keepdim)
 
     @differentiable(1)
     def sum(self, axis: int | tuple[int, ...] = (), keepdim=False):
         out_dtype = self.dtype
         if self.dtype == np.int32:
             out_dtype = np.dtype(np.int64)
-        return CUDA_OPS.reduce_op("sum", self, axis=axis, keepdim=keepdim, out_dtype=out_dtype, backward_fn=grad_ops.sum_backward)
+        return CUDA_OPS.reduce_op(
+            "sum",
+            self,
+            axis=axis,
+            keepdim=keepdim,
+            out_dtype=out_dtype,
+            backward_fn=grad_ops.sum_backward,
+        )
 
     def mean(self, axis: int | tuple[int, ...] = (), keepdim=False):
         d = np.prod([self.shape[a] for a in self._correct_axis(axis)]).item()
@@ -221,21 +248,22 @@ class Tensor:
         if axis == ():
             axis = tuple(range(self.ndim))
         for x in axis:
-            assert -self.ndim-1 < x < self.ndim
-        axis = tuple((self.ndim+x) % self.ndim for x in axis)
+            assert -self.ndim - 1 < x < self.ndim
+        axis = tuple((self.ndim + x) % self.ndim for x in axis)
         return axis
 
     @property
-    def ndim(self): return len(self.shape)
+    def ndim(self):
+        return len(self.shape)
+
     @property
-    def size(self): return np.prod(self.shape, dtype=np.int32).item()
+    def size(self):
+        return np.prod(self.shape, dtype=np.int32).item()
 
     def transpose(self, dim1: int, dim2: int):
         dims = list(range(self.ndim))
         dims[dim1], dims[dim2] = dims[dim2], dims[dim1]
-        return self.permute(
-            *dims
-        )
+        return self.permute(*dims)
 
     @differentiable(1)
     def permute(self, *dims: int):
@@ -247,15 +275,14 @@ class Tensor:
         def backward(gradient: Tensor):
             gradient_dims = [dims.index(i) for i in range(self.ndim)]
             gradient = gradient.permute(*gradient_dims)
-            return gradient,
+            return (gradient,)
+
         return out, backward
 
     def contiguous(self):
         if self.is_contiguous:
             return self
-        new_stride = stride_from_shape(self.shape)
-        # TODO: do it in gpu
-        return Tensor.from_numpy(np.ascontiguousarray(self.numpy()))
+        return self.copy_to(Tensor.empty(self.shape, dtype=self.dtype))
 
     def _broadcastable(self, other: "Tensor"):
         for d1, d2 in zip(self.shape[::-1], other.shape[::-1]):
@@ -296,14 +323,17 @@ class Tensor:
         if self.shape == dims:
             # this might be a problem
             def backward(gradient: Tensor):
-                return gradient,
+                return (gradient,)
+
             return self, backward
 
         new_shape = dims
         expected_stride = [0] * len(dims)
         expanded_dims = []
 
-        for i, d, sh, s in zip(range(self.ndim), dims[::-1], self.shape[::-1], self.stride[::-1]):
+        for i, d, sh, s in zip(
+            range(self.ndim), dims[::-1], self.shape[::-1], self.stride[::-1]
+        ):
             if sh == d:
                 expected_stride[i] = s
             else:
@@ -324,7 +354,7 @@ class Tensor:
                 # remove first added dims
                 gradient = gradient.sum(tuple(range(diff)))
 
-            return gradient,
+            return (gradient,)
 
         return self._as_view(new_shape, expected_stride), backward
 
@@ -335,31 +365,30 @@ class Tensor:
             dims_l = list(dims)
             m_one = list(filter(lambda x: x == -1, dims))
             match len(m_one):
-                case 0: pass
+                case 0:
+                    pass
                 case 1:
                     index = dims_l.index(-1)
                     dims_l.pop(index)
                     dims_l.insert(
-                        index, (self.size // np.prod(dims_l)).astype(int).item())
+                        index, (self.size // np.prod(dims_l)).astype(int).item()
+                    )
                     dims = tuple(dims_l)
                 case _:
                     raise Exception("Only one dimention can have -1")
             assert np.prod(dims) == self.size
-            out = self._as_view(
-                dims,
-                stride_from_shape(dims)
-            )
+            out = self._as_view(dims, stride_from_shape(dims))
         else:
             out = self
 
         def backward(gradient: Tensor):
-            return gradient.view(*self.shape),
+            return (gradient.view(*self.shape),)
+
         return out, backward
 
     def _as_view(self, shape, stride, ptr_offset=0, slice=None):
         return Tensor(
-            data=self.data._as_view(
-                shape, stride, offset=ptr_offset, slice=slice),  # type: ignore
+            data=self.data._as_view(shape, stride, offset=ptr_offset, slice=slice),
         )
 
     @differentiable(2)
@@ -368,6 +397,7 @@ class Tensor:
 
     def __getitem__(self, keys):
         import math
+
         if not isinstance(keys, tuple):
             keys = (keys,)
         if len(keys) < self.ndim:
@@ -385,6 +415,7 @@ class Tensor:
                 elif isinstance(k, slice):
                     return np.arange(k.start or 0, k.stop or self.shape[i], k.step or 1)
                 assert False, type(k)
+
             keys = [to_list(i, k) for i, k in enumerate(keys)]
             return CUDA_OPS.copy_out_indices(self, keys)
 
@@ -394,8 +425,7 @@ class Tensor:
         for key, dim, strd in zip(keys, self.shape, self.stride):
             if isinstance(key, slice):
                 _slice = key
-                _slice = [_slice.start or 0,
-                          _slice.stop or dim, _slice.step or 1]
+                _slice = [_slice.start or 0, _slice.stop or dim, _slice.step or 1]
 
                 # [30:...] and the dim is lower than 30 => we clip
                 _slice[1] = clip(_slice[1], 0, dim)
@@ -407,13 +437,13 @@ class Tensor:
                 _slice[0] = clip(_slice[0], 0, np.array(dim))
                 # _slice[0] = np.where(_slice[0] < shape, _slice[0], 0)
 
-                offset = (_slice[0] * strd)
+                offset = _slice[0] * strd
                 # strides at 0 dimensions shouldnt contribute to add offset
                 # it doesn't matter because the size is 0, just to match numpy's results
                 if new_dim == 0:
                     offset = 0
 
-                new_strd = (_slice[2] * strd)
+                new_strd = _slice[2] * strd
                 # strides at 0 dimensions shouldnt add contribute to stride
                 # it doesn't matter because the size is 0, just to match numpy's results
                 if new_dim == 0:
@@ -434,7 +464,7 @@ class Tensor:
             shape=tuple(new_shape),
             stride=tuple(new_stride),
             ptr_offset=sum(offsets),
-            slice=keys
+            slice=keys,
         )
 
     def __setitem__(self, keys, value: Self | int | float | bool):
@@ -456,11 +486,12 @@ class Tensor:
             # assert isinstance(fn, DifferentiableFunction), type(fn)
             assert isinstance(fn, list)
             for bfn in reversed(fn):
-                assert isinstance(
-                    bfn, (BackwardFn, grad_ops.InplaceBackwardFn)), type(bfn)
+                assert isinstance(bfn, (BackwardFn, grad_ops.InplaceBackwardFn)), type(
+                    bfn
+                )
                 grad = bfn.backward(grad)
         else:
-            self.grad = grad  # type: ignore
+            self.grad = grad
 
     def _set_backward_fn(self, func: BackwardFn | grad_ops.InplaceBackwardFn):
         if not hasattr(self, "_backward"):
@@ -473,12 +504,14 @@ class Tensor:
         return self._grad
 
     @grad.setter
-    def grad(self, val: Self | None):
+    def grad(self, val: Optional["Tensor"]):
         if val is None:
             self._grad = None
             return
         assert self._requires_gradient, "This tensor doesn't require gradient"
-        assert not val._requires_gradient, "Gradient tensors should not require gradient"
+        assert (
+            not val._requires_gradient
+        ), "Gradient tensors should not require gradient"
         assert val.shape == self.shape, (
             "The gradient should have the same shape as the tensor, "
             f"Expected: {self.shape}, found {val.shape}"
@@ -490,7 +523,8 @@ class Tensor:
         # print("Accumulated grad", self)
 
     @property
-    def requires_grad(self): return self._requires_gradient
+    def requires_grad(self):
+        return self._requires_gradient
 
     @requires_grad.setter
     def requires_grad(self, val: bool):
@@ -511,7 +545,10 @@ class CUDA_OPS:
     @overload
     @classmethod
     def elem_op(
-        cls, op_name: str, a: Tensor, b: Tensor,
+        cls,
+        op_name: str,
+        a: Tensor,
+        b: Tensor,
         backward_fn: None = None,
         floating_op: bool = False,
         out: Optional[Tensor] = None,
@@ -520,7 +557,10 @@ class CUDA_OPS:
     @overload
     @classmethod
     def elem_op(
-        cls, op_name: str, a: Tensor, b: Tensor,
+        cls,
+        op_name: str,
+        a: Tensor,
+        b: Tensor,
         backward_fn: ElemWiseBackwardFnWrapper,
         floating_op: bool = False,
         out: Optional[Tensor] = None,
@@ -528,7 +568,10 @@ class CUDA_OPS:
 
     @classmethod
     def elem_op(
-        cls, op_name: str, a: Tensor, b: Tensor,
+        cls,
+        op_name: str,
+        a: Tensor,
+        b: Tensor,
         backward_fn: Optional[ElemWiseBackwardFnWrapper] = None,
         floating_op=False,
         out: Optional[Tensor] = None,
@@ -538,13 +581,13 @@ class CUDA_OPS:
             if op_name in ["lt", "le", "gt", "ge"]:
                 out_dtype = np.dtype(np.bool)
             else:
-                out_dtype = np.dtype(promote_dtype(
-                    a.dtype, b.dtype, floating_op))
+                out_dtype = np.dtype(promote_dtype(a.dtype, b.dtype, floating_op))
         else:
             out_dtype = out.dtype
 
-        kernel = CUDA_KERNELS.get(elemwise_op_name(
-            op_name, a.dtype, b.dtype, out_dtype))
+        kernel = CUDA_KERNELS.get(
+            elemwise_op_name(op_name, a.dtype, b.dtype, out_dtype)
+        )
 
         shape = np.array(a.shape, dtype=np.int32)
         ndim = len(a.shape)
@@ -559,11 +602,14 @@ class CUDA_OPS:
         c_stride = np.array(c.stride, dtype=np.int32)
 
         kernel.launch(
-            a.data.ptr, a_stride,  # type: ignore
-            b.data.ptr, b_stride,  # type: ignore
-            c.data.ptr, c_stride,  # type: ignore
+            a.data.ptr,
+            a_stride,
+            b.data.ptr,
+            b_stride,
+            c.data.ptr,
+            c_stride,
             shape,
-            ndim
+            ndim,
         )
         if backward_fn is not None:
             return c, backward_fn(a, b, c)
@@ -572,24 +618,26 @@ class CUDA_OPS:
     @classmethod
     @overload
     def uop(
-        cls, op_name: str, a: Tensor,
-        backward_fn: None = None,
-        floating_op: bool = True
+        cls, op_name: str, a: Tensor, backward_fn: None = None, floating_op: bool = True
     ) -> Tensor: ...
 
     @classmethod
     @overload
     def uop(
-        cls, op_name: str, a: Tensor,
+        cls,
+        op_name: str,
+        a: Tensor,
         backward_fn: UnaryOpBackwardFnWrapper,
-        floating_op: bool = True
+        floating_op: bool = True,
     ) -> tuple[Tensor, UnaryOpBackwardFn]: ...
 
     @classmethod
     def uop(
-        cls, op_name: str, a: Tensor,
+        cls,
+        op_name: str,
+        a: Tensor,
         backward_fn: Optional[UnaryOpBackwardFnWrapper] = None,
-        floating_op: bool = True
+        floating_op: bool = True,
     ):
         out_dtype = promote_uop_dtype(a.dtype, floating_op)
         c = Tensor.empty(a.shape, dtype=out_dtype)
@@ -600,10 +648,12 @@ class CUDA_OPS:
         a_stride = np.array(a.stride, dtype=np.int32)
         c_stride = np.array(c.stride, dtype=np.int32)
         kernel.launch(
-            a.data.ptr, a_stride,  # type: ignore
-            c.data.ptr, c_stride,  # type: ignore
+            a.data.ptr,
+            a_stride,
+            c.data.ptr,
+            c_stride,
             shape,
-            ndim
+            ndim,
         )
         if backward_fn is not None:
             return c, backward_fn(a, c)
@@ -612,7 +662,11 @@ class CUDA_OPS:
     @classmethod
     @overload
     def reduce_op(
-        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool,
+        cls,
+        op_name,
+        a: Tensor,
+        axis: int | tuple[int, ...],
+        keepdim: bool,
         backward_fn: None = None,
         out_dtype=None,
     ) -> Tensor: ...
@@ -620,14 +674,22 @@ class CUDA_OPS:
     @classmethod
     @overload
     def reduce_op(
-        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool,
+        cls,
+        op_name,
+        a: Tensor,
+        axis: int | tuple[int, ...],
+        keepdim: bool,
         backward_fn: ReduceOpBackwardFnWrapper,
         out_dtype=None,
     ) -> tuple[Tensor, ReduceOpBackwardFn]: ...
 
     @classmethod
     def reduce_op(
-        cls, op_name, a: Tensor, axis: int | tuple[int, ...], keepdim: bool,
+        cls,
+        op_name,
+        a: Tensor,
+        axis: int | tuple[int, ...],
+        keepdim: bool,
         backward_fn: Optional[ReduceOpBackwardFnWrapper] = None,
         out_dtype=None,
     ):
@@ -636,13 +698,14 @@ class CUDA_OPS:
 
         if axis == () and (os.getenv("USE_REDUCTION", "1") != "0"):
             # this is order of 1000s faster
-            kernel = CUDA_KERNELS.get(reduction_op_name(
-                op_name, str(a.dtype), str(out_dtype)))
+            kernel = CUDA_KERNELS.get(
+                reduction_op_name(op_name, str(a.dtype), str(out_dtype))
+            )
             out = Tensor.empty((), dtype=out_dtype)
             kernel.launch(
-                a.data.ptr,  # type: ignore
-                out.data.ptr,  # type: ignore
-                a.size
+                a.data.ptr,
+                out.data.ptr,
+                a.size,
             )
             if backward_fn is not None:
                 return out, backward_fn(a, out, (), keepdim)
@@ -657,14 +720,12 @@ class CUDA_OPS:
                 if keepdim:
                     shape[a] = 1
                 else:
-                    shape.pop(a-i)
+                    shape.pop(a - i)
                     i += 1
             return shape
 
-        kernel = CUDA_KERNELS.get(reduceop_name(
-            op_name, str(a.dtype), str(out_dtype)))
-        c = Tensor.empty(
-            get_shape(list(a.shape), keepdim=False), dtype=out_dtype)
+        kernel = CUDA_KERNELS.get(reduceop_name(op_name, str(a.dtype), str(out_dtype)))
+        c = Tensor.empty(get_shape(list(a.shape), keepdim=False), dtype=out_dtype)
 
         a_shape = np.array(a.shape, dtype=np.int32)
         c_shape = np.array(c.shape, dtype=np.int32)
@@ -672,8 +733,12 @@ class CUDA_OPS:
         c_stride = np.array(c.stride, dtype=np.int32)
 
         kernel.launch(
-            a.data.ptr, a_stride, a_shape,  # type: ignore
-            c.data.ptr, c_stride, c_shape,  # type: ignore
+            a.data.ptr,
+            a_stride,
+            a_shape,
+            c.data.ptr,
+            c_stride,
+            c_shape,
             np.array(axis, dtype=np.int32),
             a.ndim,
             c.ndim,
@@ -700,10 +765,7 @@ class CUDA_OPS:
             BATCH = 1
             M, K = a.shape
             K, N = b.shape
-            out = Tensor.empty(
-                (M, N),
-                dtype=np.float32
-            )
+            out = Tensor.empty((M, N), dtype=np.float32)
             a_stride = [0] + list(a.stride)
             b_stride = [0] + list(b.stride)
             out_stride = [0] + list(out.stride)
@@ -726,21 +788,21 @@ class CUDA_OPS:
                 BATCH, M, K = a.shape
                 BATCH, K, N = b.shape
 
-            out = Tensor.empty(
-                (BATCH, M, N),
-                dtype=np.float32
-            )
+            out = Tensor.empty((BATCH, M, N), dtype=np.float32)
             out_stride = out.stride
 
         kernel = CUDA_KERNELS.get("matmul_batched")
         kernel.launch(
-            a.data.ptr,  # type: ignore
-            b.data.ptr,  # type: ignore
-            out.data.ptr,  # type: ignore
+            a.data.ptr,
+            b.data.ptr,
+            out.data.ptr,
             np.array(a_stride, dtype=np.int32),
             np.array(b_stride, dtype=np.int32),
             np.array(out_stride, dtype=np.int32),
-            BATCH, M, K, N,
+            BATCH,
+            M,
+            K,
+            N,
         )
         return out, grad_ops.matmul_backward(a, b)
 
@@ -754,8 +816,10 @@ class CUDA_OPS:
         assert dst.is_contiguous
 
         kernel.launch(
-            src.data.ptr, src_shape, src_stride,  # type: ignore
-            dst.data.ptr,  # type: ignore
+            src.data.ptr,
+            src_shape,
+            src_stride,
+            dst.data.ptr,
             src.ndim,
         )
         return dst
@@ -780,19 +844,25 @@ class CUDA_OPS:
         #     for arr in indices
         # ], dtype=np.float64)
         import ctypes
+
         IndexArrayType = ctypes.c_void_p * src.ndim
 
-        indices_arr = IndexArrayType(*[
-            ctypes.c_void_p(Tensor.from_numpy(
-                arr.astype(np.int32)).data.ptr.value)
-            for arr in indices
-        ])
+        indices_arr = IndexArrayType(
+            *[
+                ctypes.c_void_p(Tensor.from_numpy(arr.astype(np.int32)).data.ptr.value)
+                for arr in indices
+            ]
+        )
 
         indices_ptr = ctypes.cast(indices_arr, ctypes.POINTER(ctypes.c_void_p))
 
         kernel.launch(
-            src.data.ptr, src_shape, src_stride,  # type: ignore
-            dst.data.ptr, indices_ptr, dst_shape,  # type: ignore
+            src.data.ptr,
+            src_shape,
+            src_stride,  # type: ignore
+            dst.data.ptr,
+            indices_ptr,
+            dst_shape,  # type: ignore
             src.ndim,
         )
         CudaAllocator.synchronize()
@@ -810,14 +880,18 @@ class CUDA_OPS:
         # dst_stride = np.array(dst.stride, dtype=np.int32)
 
         kernel.launch(
-            data.ptr, src_shape, src_stride,  # type: ignore
-            dst.data.ptr,   # type: ignore
+            data.ptr,
+            src_shape,
+            src_stride,
+            dst.data.ptr,
             dst.ndim,
         )
         return dst
 
     @classmethod
-    def setitem_op(cls, t: Tensor, condition: Tensor, value: Tensor | int | float | bool):
+    def setitem_op(
+        cls, t: Tensor, condition: Tensor, value: Tensor | int | float | bool
+    ):
         if not isinstance(value, Tensor):
             value = Tensor.from_numpy(np.array(value, dtype=t.dtype))
             value = value.expand(*condition.shape)
@@ -837,18 +911,22 @@ class CUDA_OPS:
         t_stride = np.array(t.stride, dtype=np.int32)
 
         kernel.launch(
-            value.data.ptr, value_stride,  # type: ignore
-            condition.data.ptr,   # type: ignore
-            t.data.ptr, t_shape, t_stride,
-            t.ndim
+            value.data.ptr,
+            value_stride,
+            condition.data.ptr,
+            t.data.ptr,
+            t_shape,
+            t_stride,
+            t.ndim,
         )
         if t.requires_grad and grad_ops.Grad.is_on():
+
             def backward(gradient: Tensor):
                 cls.setitem_op(
                     gradient,
-                    # TODO why not negation of condition?
                     condition,
-                    0
+                    0,  # TODO: we mught need to get the grad from 'value'
                 )
                 return gradient
+
             t._set_backward_fn(grad_ops.InplaceBackwardFn(backward, t))

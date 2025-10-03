@@ -1,4 +1,3 @@
-
 import numpy as np
 import dataclasses
 from typing import Generator
@@ -47,11 +46,13 @@ class Adam:
             State(
                 Tensor.from_numpy(0.0).astype(np.float32),
                 Tensor.from_numpy(0.0).astype(np.float32),
-                Tensor.from_numpy(0.0).astype(np.float32)
+                Tensor.from_numpy(0.0).astype(np.float32),
             )
-            for _ in range(len(self.params))]
+            for _ in range(len(self.params))
+        ]
 
     def _step(self):
+
         lr = self.lr
         weight_decay = self.weight_decay
         beta1, beta2 = self.betas
@@ -62,10 +63,10 @@ class Adam:
             g: Tensor = p.grad
             if weight_decay != 0:
                 g = g + p * weight_decay
-            state.m = state.m * beta1 + g * (1-beta1)
-            state.v = state.v * beta2 + (g ** 2) * (1-beta2)
-            mhat = state.m / (1 + (beta1*-1))
-            vhat = state.v / (1 + (beta2*-1))
+            state.m = state.m * beta1 + g * (1 - beta1)
+            state.v = state.v * beta2 + (g**2) * (1 - beta2)
+            mhat = state.m / (1 + (beta1 * -1))
+            vhat = state.v / (1 + (beta2 * -1))
             change = mhat * lr / (vhat.sqrt() + eps)
             # change = Tensor.from_numpy(
             #     np.clip(change.numpy(), -100, 100))
