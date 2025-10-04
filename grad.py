@@ -54,7 +54,7 @@ class Grad:
         return False
 
 
-class BackwardFn:
+class Function:
     def __init__(
         self,
         function: Func,
@@ -121,7 +121,7 @@ class BackwardFn:
         return gradient  # type: ignore
 
 
-class InplaceBackwardFn:
+class InplaceFunction:
     # for inplce operations
     def __init__(self, backward_fn: Callable[[Tensor], Tensor], input: Tensor) -> None:
         self._backward_fn = backward_fn
@@ -155,7 +155,7 @@ def differentiable(number_of_args: int):
     def register(func: Func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            dfunc = BackwardFn(func, func.__name__, number_of_args)
+            dfunc = Function(func, func.__name__, number_of_args)
             return dfunc(*args, **kwargs)
 
         return wrapper

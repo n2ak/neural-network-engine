@@ -3,7 +3,7 @@ import numpy as np
 from cuda import CUDA_OPS
 from cuda.alloc import CudaAllocator, Buffer
 import grad as grad_ops
-from grad import BackwardFn, differentiable, broadcast
+from grad import Function, differentiable, broadcast
 
 from typing import Self, Optional
 
@@ -472,14 +472,12 @@ class Tensor:
             # assert isinstance(fn, DifferentiableFunction), type(fn)
             assert isinstance(fn, list)
             for bfn in reversed(fn):
-                assert isinstance(bfn, (BackwardFn, grad_ops.InplaceBackwardFn)), type(
-                    bfn
-                )
+                assert isinstance(bfn, (Function, grad_ops.InplaceFunction)), type(bfn)
                 grad = bfn.backward(grad)
         else:
             self.grad = grad
 
-    def _set_backward_fn(self, func: BackwardFn | grad_ops.InplaceBackwardFn):
+    def _set_backward_fn(self, func: Function | grad_ops.InplaceFunction):
         if not hasattr(self, "_backward"):
             self._backward = []
         self._backward.append(func)

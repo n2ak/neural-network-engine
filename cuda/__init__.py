@@ -436,4 +436,4 @@ class CUDA_OPS:
                 )
                 return gradient
 
-            t._set_backward_fn(grad_ops.InplaceBackwardFn(backward, t))
+            t._set_backward_fn(grad_ops.InplaceFunction(backward, t))
