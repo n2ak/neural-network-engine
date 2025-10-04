@@ -72,7 +72,6 @@ class Linear(Module[Tensor]):
             state = state  # .T
             old_tensor = self.weight
         elif member == "bias":
-            # TODO: check if this module doenst have bias
             old_tensor = self.bias
             assert (
                 old_tensor is not None
