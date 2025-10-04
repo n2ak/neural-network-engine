@@ -1,11 +1,9 @@
 from ctypes import c_int, c_void_p
-from .utils import _int_1d_array
+from ..utils import _int_1d_array
 
 
-def define_matmul():
-    from . import CUDA_KERNELS
-
-    CUDA_KERNELS.define_function(
+def define_matmul(lib):
+    lib.define_function(
         "matmul_batched",
         [
             c_void_p,  # A

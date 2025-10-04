@@ -1,5 +1,5 @@
 from ctypes import c_int, c_void_p
-from .utils import _int_1d_array, promote_uop_dtype
+from ..utils import _int_1d_array, promote_uop_dtype
 
 
 UOPS = [
@@ -13,10 +13,8 @@ def uop_name(name, in_dtype, out_dtype):
     return f"uop_{name}_{in_dtype}_{out_dtype}"
 
 
-def define_uop(name):
-    from . import CUDA_KERNELS
-
-    CUDA_KERNELS.define_function(
+def define_uop(lib, name):
+    lib.define_function(
         name,
         [
             c_void_p,
@@ -29,12 +27,12 @@ def define_uop(name):
     )
 
 
-def register_uops():
+def register_uops(lib):
     for name, floating_op, *dtypes in UOPS:
         for in_dtype in dtypes:
             out_dtype = promote_uop_dtype(in_dtype, floating_op)
             opname = uop_name(name, in_dtype, out_dtype)
-            define_uop(opname)
+            define_uop(lib, opname)
 
 
 def uops_code(name: str, floating_operation: bool, *dtypes: str):

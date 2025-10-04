@@ -1,5 +1,5 @@
 from ctypes import c_int, c_void_p, POINTER
-from .utils import _int_1d_array
+from ..utils import _int_1d_array
 
 
 SETITEM_DTYPES = [
@@ -14,10 +14,8 @@ def setitem_op_name(dtype):
     return f"setitem_{dtype}"
 
 
-def define_setitem_op(name: str):
-    from . import CUDA_KERNELS
-
-    CUDA_KERNELS.define_function(
+def define_setitem_op(lib, name: str):
+    lib.define_function(
         name,
         [
             c_void_p,
@@ -64,22 +62,20 @@ def setitem_source_code():
     return "\n\n".join(map(lambda v: setitem_code(v), SETITEM_DTYPES))
 
 
-def register_other_ops():
+def register_other_ops(lib):
     for dtype in SETITEM_DTYPES:
         opname = setitem_op_name(dtype)
-        define_setitem_op(opname)
+        define_setitem_op(lib, opname)
 
-    define_copyout()
-    define_copyout_indices()
+    define_copyout(lib)
+    define_copyout_indices(lib)
 
 
-def define_copyout():
-    from . import CUDA_KERNELS
-
+def define_copyout(lib):
     for in_dtype in ["float32", "float64", "int32", "int64"]:
         for out_dtype in ["float32", "float64", "int32", "int64"]:
             name = f"copy_out_{in_dtype}_{out_dtype}"
-            CUDA_KERNELS.define_function(
+            lib.define_function(
                 name,
                 [
                     c_void_p,
@@ -91,12 +87,10 @@ def define_copyout():
             )
 
 
-def define_copyout_indices():
-    from . import CUDA_KERNELS
-
+def define_copyout_indices(lib):
     for dtype in ["float32", "float64", "int32", "int64"]:
         name = f"copy_out_indices_{dtype}"
-        CUDA_KERNELS.define_function(
+        lib.define_function(
             name,
             [
                 # const T * d_A, const int * shape_A, const int * stride_A,

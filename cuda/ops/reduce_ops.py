@@ -1,5 +1,5 @@
 from ctypes import c_int, c_void_p
-from .utils import _int_1d_array
+from ..utils import _int_1d_array
 
 REDUCE_OPS = [
     (
@@ -27,10 +27,8 @@ def reduction_op_name(name, in_dtype, out_dtype):
     return f"reduction_{name}_{in_dtype}_{out_dtype}"
 
 
-def define_reduce_op(name: str):
-    from . import CUDA_KERNELS
-
-    CUDA_KERNELS.define_function(
+def define_reduce_op(lib, name: str):
+    lib.define_function(
         name,
         [
             c_void_p,
@@ -47,10 +45,8 @@ def define_reduce_op(name: str):
     )
 
 
-def define_reducction_op(name: str):
-    from . import CUDA_KERNELS
-
-    CUDA_KERNELS.define_function(
+def define_reducction_op(lib, name: str):
+    lib.define_function(
         name,
         [
             c_void_p,  # a
@@ -60,11 +56,11 @@ def define_reducction_op(name: str):
     )
 
 
-def register_reduce_ops():
+def register_reduce_ops(lib):
     for name, *dtypes in REDUCE_OPS:
         for in_dtype, out_dtypes in dtypes:
-            define_reduce_op(reduceop_name(name, in_dtype, out_dtypes))
-            define_reducction_op(reduction_op_name(name, in_dtype, out_dtypes))
+            define_reduce_op(lib, reduceop_name(name, in_dtype, out_dtypes))
+            define_reducction_op(lib, reduction_op_name(name, in_dtype, out_dtypes))
 
 
 def reduce_axis_code(name: str, *dtypes: tuple[str, str]):

@@ -2,7 +2,7 @@ import numpy as np
 from typing import Optional
 from ctypes import c_int, c_void_p, POINTER, c_size_t, byref
 
-from . import Binary
+from .bin import Binary
 from .utils import assert_cuda_error
 
 

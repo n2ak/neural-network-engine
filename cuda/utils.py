@@ -30,10 +30,10 @@ def compile_cuda_code(code: str, lib_name="libtemp.so"):
 
 
 def get_cuda_code():
-    from ._other_ops import other_ops_source_code
-    from ._unary_ops import unary_ops_source_code
-    from ._reduce_ops import reduction_ops_source_code
-    from ._elemwsie_ops import element_wise_source_code
+    from .ops.other_ops import other_ops_source_code
+    from .ops.unary_ops import unary_ops_source_code
+    from .ops.reduce_ops import reduction_ops_source_code
+    from .ops.elemwsie_ops import element_wise_source_code
 
     code = "\n".join(
         [
